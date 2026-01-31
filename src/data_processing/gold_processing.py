@@ -25,7 +25,7 @@ def create_time_dimension(spark, silver_table_name, time_table_name):
             .otherwise("Weekday").alias("day_type")
     ).distinct()
     
-    df_time.write.format("delta").mode("overwrite").saveAsTable(time_table_name)
+    df_time.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(time_table_name)
     return time_table_name
 
 
