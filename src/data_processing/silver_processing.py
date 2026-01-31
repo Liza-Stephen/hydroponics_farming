@@ -18,19 +18,19 @@ def _to_bool(col_name):
         .otherwise(None)
 
 
-def clean_and_validate_data(spark, bronze_table_path, silver_table_path):
+def clean_and_validate_data(spark, bronze_table_name, silver_table_name):
     """
     Transform bronze data to silver layer with cleaning and validation
     
     Args:
         spark: SparkSession
-        bronze_table_path: Path to bronze Delta table
-        silver_table_path: Path where silver Delta table will be stored
+        bronze_table_name: Full bronze table name (catalog.schema.table)
+        silver_table_name: Full silver table name (catalog.schema.table)
     """
     print("Processing data from bronze to silver layer...")
     
-    # Read from bronze
-    df = spark.read.format("delta").load(bronze_table_path)
+    # Read from bronze table
+    df = spark.table(bronze_table_name)
     
     from pyspark.sql.functions import to_timestamp
     
@@ -79,33 +79,32 @@ def clean_and_validate_data(spark, bronze_table_path, silver_table_path):
         "silver_processed_timestamp", current_timestamp()
     )
     
-    # Write to Delta table (merge for upsert capability)
+    # Write directly to managed table
     df_final.write \
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .save(silver_table_path)
+        .saveAsTable(silver_table_name)
     
     print(f"Successfully processed {df_final.count()} records to silver layer")
     return df_final
 
 
 def create_silver_table(spark, config, table_name="iot_data"):
-    """Create silver table"""
-    silver_path = f"{config.silver_path}/{table_name}"
+    """Create silver table as managed table"""
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {config.silver_schema}")
     table_name_full = config.get_table_name(config.silver_schema, table_name)
-    spark.sql(f"CREATE TABLE IF NOT EXISTS {table_name_full} USING DELTA LOCATION '{silver_path}'")
-    return silver_path
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {table_name_full} USING DELTA")
+    return table_name_full
 
 
 def run_silver_processing():
     """Run silver layer processing"""
     spark, config = get_spark_session()
     
-    silver_path = create_silver_table(spark, config)
-    bronze_path = f"{config.bronze_path}/iot_data"
-    df = clean_and_validate_data(spark, bronze_path, silver_path)
+    silver_table_name = create_silver_table(spark, config)
+    bronze_table_name = config.get_table_name(config.bronze_schema, "iot_data")
+    df = clean_and_validate_data(spark, bronze_table_name, silver_table_name)
     
     print("\nSample silver data:")
     df.show(5, truncate=False)

@@ -3,9 +3,9 @@ from pyspark.sql.functions import col, year, month, dayofmonth, hour, minute, da
 from config.databricks_config import get_spark_session
 
 
-def create_time_dimension(spark, silver_table_path, gold_path):
+def create_time_dimension(spark, silver_table_name, time_table_name):
     """Create time dimension"""
-    df_silver = spark.read.format("delta").load(silver_table_path)
+    df_silver = spark.table(silver_table_name)
     df_time = df_silver.select(
         col("timestamp").alias("timestamp_key"),
         date_format(col("timestamp"), "yyyy-MM-dd HH:mm:ss").alias("timestamp_full"),
@@ -25,12 +25,11 @@ def create_time_dimension(spark, silver_table_path, gold_path):
             .otherwise("Weekday").alias("day_type")
     ).distinct()
     
-    time_dim_path = f"{gold_path}/dim_time"
-    df_time.write.format("delta").mode("overwrite").save(time_dim_path)
-    return time_dim_path
+    df_time.write.format("delta").mode("overwrite").saveAsTable(time_table_name)
+    return time_table_name
 
 
-def create_equipment_dimension(spark, gold_path):
+def create_equipment_dimension(spark, equipment_table_name):
     """Create equipment dimension"""
     equipment_data = [
         (1, "pH_reducer", "pH Reduction System", "Controls pH levels in nutrient solution"),
@@ -44,14 +43,13 @@ def create_equipment_dimension(spark, gold_path):
         equipment_data,
         ["equipment_id", "equipment_code", "equipment_name", "equipment_description"]
     )
-    equipment_dim_path = f"{gold_path}/dim_equipment"
-    df_equipment.write.format("delta").mode("overwrite").save(equipment_dim_path)
-    return equipment_dim_path
+    df_equipment.write.format("delta").mode("overwrite").saveAsTable(equipment_table_name)
+    return equipment_table_name
 
 
-def create_fact_sensor_readings(spark, silver_table_path, gold_path):
+def create_fact_sensor_readings(spark, silver_table_name, fact_table_name):
     """Create fact table"""
-    df_silver = spark.read.format("delta").load(silver_table_path)
+    df_silver = spark.table(silver_table_name)
     df_fact = df_silver.select(
         col("id").alias("reading_id"),
         col("timestamp").alias("timestamp_key"),
@@ -73,33 +71,30 @@ def create_fact_sensor_readings(spark, silver_table_path, gold_path):
         col("ingestion_timestamp"),
         col("source_file")
     )
-    fact_path = f"{gold_path}/iot_data"
-    df_fact.write.format("delta").mode("overwrite").save(fact_path)
-    return fact_path
+    df_fact.write.format("delta").mode("overwrite").saveAsTable(fact_table_name)
+    return fact_table_name
 
 
 def create_gold_tables(spark, config):
     """Create all gold layer tables"""
-    silver_path = f"{config.silver_path}/iot_data"
-    gold_path = config.gold_path
-    
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {config.gold_schema}")
     
+    silver_table_name = config.get_table_name(config.silver_schema, "iot_data")
+    time_table_name = config.get_table_name(config.gold_schema, "dim_time")
+    equipment_table_name = config.get_table_name(config.gold_schema, "dim_equipment")
+    fact_table_name = config.get_table_name(config.gold_schema, "iot_data")
+    
+    # Create managed tables first
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {time_table_name} USING DELTA")
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {equipment_table_name} USING DELTA")
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {fact_table_name} USING DELTA")
+    
     # Create dimensions and fact
-    time_dim_path = create_time_dimension(spark, silver_path, gold_path)
-    equipment_dim_path = create_equipment_dimension(spark, gold_path)
-    fact_path = create_fact_sensor_readings(spark, silver_path, gold_path)
+    create_time_dimension(spark, silver_table_name, time_table_name)
+    create_equipment_dimension(spark, equipment_table_name)
+    create_fact_sensor_readings(spark, silver_table_name, fact_table_name)
     
-    # Register tables
-    for table_name, path in [
-        ("dim_time", time_dim_path),
-        ("dim_equipment", equipment_dim_path),
-        ("iot_data", fact_path)
-    ]:
-        full_name = config.get_table_name(config.gold_schema, table_name)
-        spark.sql(f"CREATE TABLE IF NOT EXISTS {full_name} USING DELTA LOCATION '{path}'")
-    
-    return {"dim_time": time_dim_path, "dim_equipment": equipment_dim_path, "iot_data": fact_path}
+    return {"dim_time": time_table_name, "dim_equipment": equipment_table_name, "iot_data": fact_table_name}
 
 
 def run_gold_processing():

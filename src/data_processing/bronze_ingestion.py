@@ -23,14 +23,14 @@ def create_bronze_schema():
     ])
 
 
-def ingest_raw_data(spark, source_path, bronze_table_path):
+def ingest_raw_data(spark, source_path, bronze_table_name):
     """
     Ingest raw CSV data into bronze layer
     
     Args:
         spark: SparkSession
         source_path: Path to source CSV file
-        bronze_table_path: Path where bronze Delta table will be stored
+        bronze_table_name: Full table name (catalog.schema.table)
     """
     print(f"Ingesting data from {source_path} to bronze layer...")
     
@@ -47,24 +47,24 @@ def ingest_raw_data(spark, source_path, bronze_table_path):
     df = df.withColumn("ingestion_timestamp", current_timestamp()) \
            .withColumn("source_file", lit(source_path.split("/")[-1]))
     
-    # Write to Delta table (append mode for incremental loads)
+    # Write directly to managed table (append mode for incremental loads)
     df.write \
       .format("delta") \
       .mode("append") \
       .option("mergeSchema", "true") \
-      .save(bronze_table_path)
+      .saveAsTable(bronze_table_name)
     
     print(f"Successfully ingested {df.count()} records to bronze layer")
     return df
 
 
 def create_bronze_table(spark, config, table_name="iot_data"):
-    """Create bronze table"""
-    bronze_path = f"{config.bronze_path}/{table_name}"
+    """Create bronze table as managed table"""
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {config.bronze_schema}")
     table_name_full = config.get_table_name(config.bronze_schema, table_name)
-    spark.sql(f"CREATE TABLE IF NOT EXISTS {table_name_full} USING DELTA LOCATION '{bronze_path}'")
-    return bronze_path
+    # Create managed table (Unity Catalog manages storage)
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {table_name_full} USING DELTA")
+    return table_name_full
 
 
 def run_bronze_ingestion(source_csv_path=None):
@@ -72,8 +72,8 @@ def run_bronze_ingestion(source_csv_path=None):
     spark, config = get_spark_session()
     source_path = source_csv_path or config.source_data_path
     
-    bronze_path = create_bronze_table(spark, config)
-    df = ingest_raw_data(spark, source_path, bronze_path)
+    bronze_table_name = create_bronze_table(spark, config)
+    df = ingest_raw_data(spark, source_path, bronze_table_name)
     
     print("\nSample bronze data:")
     df.show(5, truncate=False)
