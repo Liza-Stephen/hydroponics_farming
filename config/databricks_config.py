@@ -1,0 +1,46 @@
+"""Databricks configuration"""
+import os
+from pyspark.sql import SparkSession
+
+# Load environment variables if not in Databricks
+if not os.getenv("DATABRICKS_RUNTIME_VERSION"):
+    from dotenv import load_dotenv
+    load_dotenv()
+
+
+class DatabricksConfig:
+    """Configuration for Databricks"""
+    
+    def __init__(self):
+        self.catalog = os.getenv("DATABRICKS_CATALOG")
+        if not self.catalog:
+            raise ValueError("DATABRICKS_CATALOG is required. Set it in job environment variables.")
+        
+        if self.catalog in ["spark_catalog", "hive_metastore"]:
+            raise ValueError(f"Invalid catalog '{self.catalog}'. Use Unity Catalog (e.g., 'main').")
+        
+        self.bronze_schema = "bronze"
+        self.silver_schema = "silver"
+        self.gold_schema = "gold"
+        self.bronze_path = f"dbfs:/mnt/hydroponics/{self.bronze_schema}"
+        self.silver_path = f"dbfs:/mnt/hydroponics/{self.silver_schema}"
+        self.gold_path = f"dbfs:/mnt/hydroponics/{self.gold_schema}"
+        self.source_data_path = os.getenv("SOURCE_DATA_PATH", "dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv")
+    
+    def get_table_name(self, schema, table):
+        """Get full table name: catalog.schema.table"""
+        return f"{self.catalog}.{schema}.{table}"
+
+
+def get_spark_session():
+    """Get Spark session and set Unity Catalog"""
+    config = DatabricksConfig()
+    
+    spark = SparkSession.getActiveSession() or SparkSession.builder \
+        .appName("HydroponicsDataProcessing") \
+        .getOrCreate()
+    
+    spark.sql(f"USE CATALOG {config.catalog}")
+    print(f"✓ Using catalog: {config.catalog}")
+    
+    return spark, config
