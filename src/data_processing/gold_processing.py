@@ -43,7 +43,8 @@ def create_equipment_dimension(spark, equipment_table_name):
         equipment_data,
         ["equipment_id", "equipment_code", "equipment_name", "equipment_description"]
     )
-    df_equipment.write.format("delta").mode("overwrite").saveAsTable(equipment_table_name)
+
+    df_equipment.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(equipment_table_name)
     return equipment_table_name
 
 
@@ -71,7 +72,8 @@ def create_fact_sensor_readings(spark, silver_table_name, fact_table_name):
         col("ingestion_timestamp"),
         col("source_file")
     )
-    df_fact.write.format("delta").mode("overwrite").saveAsTable(fact_table_name)
+
+    df_fact.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(fact_table_name)
     return fact_table_name
 
 
