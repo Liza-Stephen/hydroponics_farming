@@ -22,10 +22,10 @@ class DatabricksConfig:
         self.bronze_schema = "bronze"
         self.silver_schema = "silver"
         self.gold_schema = "gold"
-        self.bronze_path = f"dbfs:/mnt/hydroponics/{self.bronze_schema}"
-        self.silver_path = f"dbfs:/mnt/hydroponics/{self.silver_schema}"
-        self.gold_path = f"dbfs:/mnt/hydroponics/{self.gold_schema}"
-        self.source_data_path = os.getenv("SOURCE_DATA_PATH", "dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv")
+        self.bronze_path = f"/Volumes/{self.catalog}/{self.bronze_schema}"
+        self.silver_path = f"/Volumes/{self.catalog}/{self.silver_schema}"
+        self.gold_path = f"/Volumes/{self.catalog}/{self.gold_schema}"
+        self.source_data_path = os.getenv("SOURCE_DATA_PATH", f"/Volumes/{self.catalog}/bronze/raw_data/iot_data_raw.csv")
     
     def get_table_name(self, schema, table):
         """Get full table name: catalog.schema.table"""

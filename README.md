@@ -4,10 +4,9 @@ A Databricks-based data processing pipeline implementing the medallion architect
 
 ## Execution Mode
 
-**Code runs natively in Databricks via Repos and Jobs.**
+**Code runs natively in Databricks via Jobs.**
 
-- Code is stored in GitHub and synced to Databricks via Repos
-- Data is uploaded to DBFS before running
+- Data is stored in Unity Catalog Volumes
 - Pipeline runs as a Databricks Job (triggered from local via CLI)
 - All execution happens natively in Databricks (no Databricks Connect needed)
 - Supports serverless compute or traditional clusters via job configuration
@@ -16,7 +15,7 @@ A Databricks-based data processing pipeline implementing the medallion architect
 
 This project implements a three-layer medallion architecture:
 
-- **Bronze Layer**: Raw data ingestion from CSV files in DBFS
+- **Bronze Layer**: Raw data ingestion from CSV files in Unity Catalog Volumes
 - **Silver Layer**: Cleaned, validated, and deduplicated data
 - **Gold Layer**: Business-ready fact and dimension tables in star schema format
 
@@ -34,7 +33,6 @@ hydroponics_farming/
 │   │   └── gold_processing.py    # Gold layer fact & dimension tables
 │   └── main.py                   # Main orchestration script
 ├── scripts/
-│   ├── upload_data_to_dbfs.py    # Script to upload data to DBFS
 │   └── create_databricks_job.sh   # Script to create Databricks job
 ├── raw_data/
 │   └── iot_data_raw.csv          # Source IoT sensor data
@@ -49,28 +47,11 @@ hydroponics_farming/
 
 - Python 3.8+ (for local scripts)
 - Databricks workspace access
-- GitHub repository
 - Databricks CLI (`brew install databricks/tap/databricks`)
 
 ### Setup Steps
 
-#### 1. Push Code to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/your-username/hydroponics_farming.git
-git push -u origin main
-```
-
-#### 2. Connect Repo to Databricks
-
-1. In Databricks UI → **Repos** → **Add Repo**
-2. Select **GitHub**, enter repo URL, select branch `main`
-3. Code available at: `/Repos/your-username/hydroponics_farming`
-
-#### 3. Configure Databricks CLI
+#### 1. Configure Databricks CLI
 
 ```bash
 brew install databricks/tap/databricks
@@ -78,36 +59,25 @@ databricks configure
 # Enter workspace URL and personal access token
 ```
 
-#### 4. Upload Data to DBFS
-
-```bash
-python scripts/upload_data_to_dbfs.py
-```
-
-Verify upload:
-```bash
-databricks fs ls dbfs:/mnt/hydroponics/raw_data/
-```
-
-#### 5. Create Databricks Job
+#### 2. Create Databricks Job
 
 **Option A: Using script**
 ```bash
 # Edit databricks_job_config.json:
 # - Set DATABRICKS_CATALOG (e.g., "main")
-# - Update path: /Repos/your-username/hydroponics_farming/src/main.py
+# - Update path to your Python file location
 bash scripts/create_databricks_job.sh
 ```
 
 **Option B: Using UI**
 1. **Workflows** → **Jobs** → **Create Job**
 2. **Task type**: Python script
-3. **Path**: `/Repos/your-username/hydroponics_farming/src/main.py`
+3. **Path**: Path to your `main.py` file (e.g., workspace path or uploaded file)
 4. **Environment variables**:
    - `DATABRICKS_CATALOG=your_catalog`
-   - `SOURCE_DATA_PATH=dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv`
+   - `SOURCE_DATA_PATH=/Volumes/your_catalog/bronze/raw_data/iot_data_raw.csv`
 
-#### 6. Run the Job
+#### 3. Run the Job
 
 **CLI:**
 ```bash
@@ -116,7 +86,7 @@ databricks jobs run-now --job-id <job-id>
 
 **UI:** Workflows → Jobs → Run Now
 
-#### 7. Verify Results
+#### 4. Verify Results
 
 ```sql
 USE CATALOG your_catalog;
@@ -131,15 +101,16 @@ SELECT COUNT(*) FROM gold.dim_equipment;
 
 ### Environment Variables (Set in Job Configuration)
 
-- **DATABRICKS_CATALOG**: Unity Catalog catalog name (e.g., `main`, `production`)
-- **SOURCE_DATA_PATH**: Path to source CSV in DBFS (default: `dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv`)
+- **DATABRICKS_CATALOG**: Unity Catalog catalog name (set to `hydroponics`)
+- **SOURCE_DATA_PATH**: Path to source CSV in Volumes (default: `/Volumes/{catalog}/bronze/raw_data/iot_data_raw.csv`)
 
 ### Data Paths
 
-All data is stored in DBFS:
-- Bronze: `dbfs:/mnt/hydroponics/bronze/iot_data`
-- Silver: `dbfs:/mnt/hydroponics/silver/iot_data`
-- Gold: `dbfs:/mnt/hydroponics/gold/iot_data`
+All data is stored in Unity Catalog Volumes:
+- Source data: `/Volumes/{catalog}/bronze/raw_data/iot_data_raw.csv`
+- Bronze: `/Volumes/{catalog}/bronze/iot_data`
+- Silver: `/Volumes/{catalog}/silver/iot_data`
+- Gold: `/Volumes/{catalog}/gold/iot_data`
 
 Tables are registered in Unity Catalog:
 - `{catalog}.bronze.iot_data`
@@ -153,7 +124,7 @@ Tables are registered in Unity Catalog:
 ### Run Full Pipeline
 
 The pipeline runs automatically when the Databricks job is executed. It processes:
-1. **Bronze Layer**: Ingests raw CSV data from DBFS
+1. **Bronze Layer**: Ingests raw CSV data from Unity Catalog Volumes
 2. **Silver Layer**: Cleans and validates data
 3. **Gold Layer**: Creates fact and dimension tables
 
@@ -164,7 +135,7 @@ To run individual layers in Databricks notebooks:
 ```python
 # Bronze only
 from data_processing.bronze_ingestion import run_bronze_ingestion
-run_bronze_ingestion("dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv")
+run_bronze_ingestion("/Volumes/your_catalog/bronze/raw_data/iot_data_raw.csv")
 
 # Silver only (requires bronze to exist)
 from data_processing.silver_processing import run_silver_processing
@@ -178,7 +149,7 @@ run_gold_processing()
 ## Data Processing Details
 
 ### Bronze Layer
-- Ingests raw CSV data from DBFS
+- Ingests raw CSV data from Unity Catalog Volumes
 - Preserves all original data
 - Adds metadata: `ingestion_timestamp`, `source_file`
 - Stores in Delta format for ACID transactions
@@ -226,19 +197,19 @@ ORDER BY t.date DESC, t.hour DESC;
 - Ensure you have permissions to access the catalog
 
 **Job fails: "File not found"**
-- Check data uploaded: `databricks fs ls dbfs:/mnt/hydroponics/raw_data/`
-- Verify `SOURCE_DATA_PATH` in job config matches the uploaded path
+- Verify data exists at `/Volumes/{catalog}/bronze/raw_data/iot_data_raw.csv`
+- Check `SOURCE_DATA_PATH` in job config matches the actual path
 
 **Job fails: "Module not found"**
-- Ensure the Repo path in job configuration is correct
-- Verify all Python files are in the Repo
+- Ensure the Python file path in job configuration is correct
+- Verify all Python files are accessible from the job
 
 **Schema creation errors**
 - Check that you have CREATE SCHEMA permissions in the catalog
 - Verify the catalog name is correct
 
 **Data not found**
-- Verify data is uploaded to DBFS using `scripts/upload_data_to_dbfs.py`
+- Verify data exists in Unity Catalog Volumes at `/Volumes/{catalog}/bronze/raw_data/`
 
 **Schema errors**
 - Check that the source CSV matches the expected format

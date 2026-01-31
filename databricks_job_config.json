@@ -17,8 +17,8 @@
         }
       },
       "environment": {
-        "DATABRICKS_CATALOG": "your_catalog",
-        "SOURCE_DATA_PATH": "dbfs:/mnt/hydroponics/raw_data/iot_data_raw.csv"
+        "DATABRICKS_CATALOG": "hydroponics",
+        "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
       }
     }
   ],
