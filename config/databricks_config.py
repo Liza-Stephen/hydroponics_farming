@@ -18,7 +18,7 @@ class DatabricksConfig:
         if len(sys.argv) > 1:
             self.catalog = sys.argv[1]
         else:
-            self.catalog = os.getenv("DATABRICKS_CATALOG")
+            self.catalog = 'hydroponics'
         
         if not self.catalog:
             raise ValueError("DATABRICKS_CATALOG is required. Set it as job parameter or environment variable.")
