@@ -78,3 +78,9 @@ def run_bronze_ingestion(source_csv_path=None):
     print("\nSample bronze data:")
     df.show(5, truncate=False)
     return df
+
+
+if __name__ == "__main__":
+    # Parameters come from job configuration: [DATABRICKS_CATALOG, SOURCE_DATA_PATH]
+    # Config reads them automatically via sys.argv
+    run_bronze_ingestion()

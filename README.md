@@ -9,7 +9,7 @@ A Databricks-based data processing pipeline implementing the medallion architect
 - Data is stored in Unity Catalog Volumes
 - Pipeline runs as a Databricks Job (triggered from local via CLI)
 - All execution happens natively in Databricks (no Databricks Connect needed)
-- Supports serverless compute or traditional clusters via job configuration
+- Uses serverless compute automatically (workspace requirement)
 
 ## Architecture Overview
 
@@ -64,18 +64,28 @@ databricks configure
 **Option A: Using script**
 ```bash
 # Edit databricks_job_config.json:
-# - Set DATABRICKS_CATALOG (e.g., "main")
-# - Update path to your Python file location
+# - Update path to your Python file location (line 8)
+# Note: Serverless compute is used automatically (no compute configuration needed)
 bash scripts/create_databricks_job.sh
 ```
+
+After creating the job, configure parameters in the Databricks UI:
+1. Go to **Workflows** → **Jobs** → Your job
+2. Click **Edit**
+3. Go to **Task** → **Parameters**
+4. Set parameters:
+   - Parameter 1: `hydroponics` (DATABRICKS_CATALOG)
+   - Parameter 2: `/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv` (SOURCE_DATA_PATH)
+5. **Compute** will automatically use serverless (no configuration needed)
 
 **Option B: Using UI**
 1. **Workflows** → **Jobs** → **Create Job**
 2. **Task type**: Python script
-3. **Path**: Path to your `main.py` file (e.g., workspace path or uploaded file)
-4. **Environment variables**:
-   - `DATABRICKS_CATALOG=your_catalog`
-   - `SOURCE_DATA_PATH=/Volumes/your_catalog/bronze/raw_data/iot_data_raw.csv`
+3. **Path**: Path to your Python file (e.g., from Git source: `src/data_processing/bronze_ingestion.py`)
+4. **Parameters** (in task settings):
+   - Parameter 1: `hydroponics` (DATABRICKS_CATALOG)
+   - Parameter 2: `/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv` (SOURCE_DATA_PATH)
+5. **Compute**: Select serverless
 
 #### 3. Run the Job
 
@@ -99,10 +109,13 @@ SELECT COUNT(*) FROM gold.dim_equipment;
 
 ## Configuration
 
-### Environment Variables (Set in Job Configuration)
+### Job Parameters
 
-- **DATABRICKS_CATALOG**: Unity Catalog catalog name (set to `hydroponics`)
-- **SOURCE_DATA_PATH**: Path to source CSV in Volumes (default: `/Volumes/{catalog}/bronze/raw_data/iot_data_raw.csv`)
+Set these as parameters in the job task configuration:
+- **Parameter 1**: `DATABRICKS_CATALOG` (e.g., `hydroponics`)
+- **Parameter 2**: `SOURCE_DATA_PATH` (e.g., `/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv`)
+
+These are passed to the Python script via `sys.argv` and can also be set as environment variables as a fallback.
 
 ### Data Paths
 
@@ -193,7 +206,7 @@ ORDER BY t.date DESC, t.hour DESC;
 ## Troubleshooting
 
 **Job fails: "Catalog not found"**
-- Verify `DATABRICKS_CATALOG` in job environment variables
+- Verify `DATABRICKS_CATALOG` is set as the first job parameter
 - Ensure you have permissions to access the catalog
 
 **Job fails: "File not found"**

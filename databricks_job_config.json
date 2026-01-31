@@ -1,28 +1,20 @@
 {
-  "name": "Hydroponics Data Processing Pipeline",
+  "name": "bronze_to_silver_serverless",
+  "git_source": {
+    "git_url": "https://github.com/Liza-Stephen/hydroponics_farming.git",
+    "git_provider": "github",
+    "git_branch": "main"
+  },
   "tasks": [
     {
-      "task_key": "run_pipeline",
-      "description": "Run the complete medallion architecture pipeline (Bronze -> Silver -> Gold)",
+      "task_key": "bronze_to_silver",
       "spark_python_task": {
-        "python_file": "/Repos/your-username/hydroponics_farming/src/main.py"
+        "python_file": "src/data_processing/bronze_ingestion.py",
+        "parameters": ["hydroponics", "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"]
       },
-      "new_cluster": {
-        "spark_version": "14.3.x-scala2.12",
-        "node_type_id": "i3.xlarge",
-        "num_workers": 2,
-        "spark_conf": {
-          "spark.databricks.cluster.profile": "singleNode",
-          "spark.master": "local[*]"
-        }
-      },
-      "environment": {
-        "DATABRICKS_CATALOG": "hydroponics",
-        "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
+      "compute": {
+        "kind": "serverless"
       }
     }
-  ],
-  "format": "MULTI_TASK",
-  "timeout_seconds": 3600,
-  "max_concurrent_runs": 1
+  ]
 }

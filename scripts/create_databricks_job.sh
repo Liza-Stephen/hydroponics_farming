@@ -5,7 +5,8 @@
 echo "Creating Databricks job..."
 
 # Create the job using the JSON configuration
-databricks jobs create --json-file databricks_job_config.json
+# Use @ prefix to read from file
+databricks jobs create --json @databricks_job_config.json
 
 echo "Job created successfully!"
-echo "You can now run the job using: databricks jobs run-now --job-id <job-id>"
+echo "You can now run the job using: databricks jobs run-now <job-id>"
