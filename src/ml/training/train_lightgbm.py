@@ -137,7 +137,7 @@ def train_lightgbm(
         registered_model_name=registered_model_name,
         input_example=input_example
     )
-    print(f"✓ Model logged: {model_uri}")
+    print(f"Model logged: {model_uri}")
     
     # Log feature importance
     feature_importance = dict(zip(feature_names, model.feature_importance(importance_type='gain')))

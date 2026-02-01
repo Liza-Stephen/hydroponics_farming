@@ -22,15 +22,15 @@ def setup_mlflow_experiment(experiment_name):
         experiment = mlflow.get_experiment_by_name(experiment_name)
         if experiment is None:
             experiment_id = mlflow.create_experiment(experiment_name)
-            print(f"✓ Created MLflow experiment: {experiment_name}")
+            print(f"Created MLflow experiment: {experiment_name}")
         else:
             experiment_id = experiment.experiment_id
-            print(f"✓ Using existing MLflow experiment: {experiment_name}")
+            print(f"Using existing MLflow experiment: {experiment_name}")
         
         mlflow.set_experiment(experiment_name)
         return experiment_id
     except Exception as e:
-        print(f"⚠️  Error setting up experiment: {e}")
+        print(f"Error setting up experiment: {e}")
         # Fallback to default experiment
         mlflow.set_experiment("Default")
         return "0"
@@ -68,7 +68,7 @@ def log_pytorch_model(model, artifact_path="model", registered_model_name=None):
     
     if registered_model_name:
         mlflow.register_model(model_uri, registered_model_name)
-        print(f"✓ Registered model: {registered_model_name}")
+        print(f"Registered model: {registered_model_name}")
     
     return model_uri
 
@@ -94,7 +94,7 @@ def log_lightgbm_model(model, artifact_path="model", registered_model_name=None,
     
     if registered_model_name:
         mlflow.register_model(model_uri, registered_model_name)
-        print(f"✓ Registered model: {registered_model_name}")
+        print(f"Registered model: {registered_model_name}")
     
     return model_uri
 
@@ -108,7 +108,7 @@ def get_latest_model_version(model_name):
             return latest_version[0].version
         return None
     except Exception as e:
-        print(f"⚠️  Error getting latest model version: {e}")
+        print(f"Error getting latest model version: {e}")
         return None
 
 
@@ -128,9 +128,9 @@ def transition_model_stage(model_name, version, stage):
             version=version,
             stage=stage
         )
-        print(f"✓ Transitioned {model_name} v{version} to {stage}")
+        print(f"Transitioned {model_name} v{version} to {stage}")
     except Exception as e:
-        print(f"⚠️  Error transitioning model: {e}")
+        print(f"Error transitioning model: {e}")
 
 
 def load_model_from_registry(model_name, stage="Production"):

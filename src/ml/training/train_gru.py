@@ -208,7 +208,7 @@ def train_gru(
     # Log model to MLflow
     print(f"\nLogging model to MLflow...")
     model_uri = log_pytorch_model(model, artifact_path="gru_model", registered_model_name=registered_model_name)
-    print(f"✓ Model logged: {model_uri}")
+    print(f"Model logged: {model_uri}")
     
     return model, scaler_X, scaler_y
 

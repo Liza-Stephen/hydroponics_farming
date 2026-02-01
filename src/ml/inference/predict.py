@@ -41,7 +41,7 @@ def predict_with_lstm_gru(
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
-    print(f"✓ Model loaded on {device}")
+    print(f"Model loaded on {device}")
     
     # Load features
     spark, config = get_spark_session()
@@ -117,7 +117,7 @@ def predict_with_lightgbm(
     # Load model from registry
     print(f"Loading model {model_name} from {model_stage} stage...")
     model = load_model_from_registry(model_name, stage=model_stage)
-    print("✓ Model loaded")
+    print("Model loaded")
     
     # Load features
     spark, config = get_spark_session()

@@ -25,7 +25,7 @@ class FeatureStoreManager:
         
         # Create database if it doesn't exist
         self.spark.sql(f"CREATE DATABASE IF NOT EXISTS {catalog}.{database}")
-        print(f"✓ Feature Store database: {catalog}.{database}")
+        print(f"Feature Store database: {catalog}.{database}")
     
     def create_sensor_features(self, gold_table_name, feature_table_name):
         """
@@ -125,7 +125,7 @@ class FeatureStoreManager:
         
         print(f"Creating feature table as Delta table: {full_table_name}")
         df_features.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(full_table_name)
-        print(f"✓ Created feature table: {full_table_name}")
+        print(f"Created feature table: {full_table_name}")
         
         return full_table_name
     

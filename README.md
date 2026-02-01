@@ -470,7 +470,7 @@ You should see output like:
 ```
 Starting API server on port 8000
 S3 bucket: s3://your-bucket-name/bronze/api_data/
-✓ S3 connection successful
+S3 connection successful
 Buffer size: 100
 API endpoint: http://localhost:8000/api/sensor-data
 ------------------------------------------------------------
