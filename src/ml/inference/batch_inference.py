@@ -14,25 +14,24 @@ from src.ml.utils.mlflow_utils import load_model_from_registry, get_latest_model
 # Note: We create sequences manually in this script
 
 
-def load_latest_model_and_uri(model_name):
+def load_latest_model_and_uri(model_name, catalog=None):
     """
     Load the latest model version and return model + URI
     
     Args:
-        model_name: Model name in MLflow registry
+        model_name: Model name in MLflow registry (can be simple or full three-level format)
+        catalog: Catalog name (optional, for constructing full path)
     
     Returns:
         (model, model_uri) tuple
     """
-    client = MlflowClient()
-    
-    # Get latest version
-    version = get_latest_model_version(model_name)
+    # Get latest version (function handles both simple and full names)
+    version, full_model_name = get_latest_model_version(model_name, catalog=catalog)
     if version is None:
         raise ValueError(f"No versions found for model {model_name}")
     
-    model_uri = f"models:/{model_name}/{version}"
-    print(f"Loading {model_name} version {version} from {model_uri}")
+    model_uri = f"models:/{full_model_name}/{version}"
+    print(f"Loading {full_model_name} version {version} from {model_uri}")
     
     # Load model
     try:
@@ -71,8 +70,17 @@ def load_feature_spec(model_uri, feature_table_name, target_col=None):
                 # Extract feature names from signature
                 feature_names = [input.name for input in model_info.signature.inputs.inputs]
                 if feature_names:
-                    print(f"Loaded {len(feature_names)} features from model signature")
-                    return feature_names
+                    # Check if feature names are integers (indicates unnamed columns from array)
+                    # If so, fall back to inferring from feature table
+                    try:
+                        # Try to convert first name to int - if it works, they're all likely integers
+                        int(feature_names[0])
+                        print(f"Model signature has integer column names, inferring from feature table...")
+                        # Fall through to feature table inference
+                    except (ValueError, TypeError):
+                        # Feature names are actual strings, use them
+                        print(f"Loaded {len(feature_names)} features from model signature")
+                        return feature_names
     except Exception as e:
         print(f"Could not load features from signature: {e}")
     
@@ -85,6 +93,15 @@ def load_feature_spec(model_uri, feature_table_name, target_col=None):
     exclude_cols = ['timestamp', 'timestamp_key']
     if target_col:
         exclude_cols.append(target_col)
+    
+    # If is_env_optimal exists in the table, exclude optimal indicators and raw sensor values
+    # (these would cause data leakage if used as features for is_env_optimal prediction)
+    if "is_env_optimal" in df_pandas.columns:
+        optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
+        raw_sensor_cols = ["ph_level", "tds_level", "air_temperature", "air_humidity"]
+        # Only exclude if they exist in the table
+        exclude_cols.extend([col for col in optimal_cols if col in df_pandas.columns])
+        exclude_cols.extend([col for col in raw_sensor_cols if col in df_pandas.columns])
     
     feature_cols = [
         col for col in df_pandas.select_dtypes(include=[np.number]).columns 
@@ -131,9 +148,9 @@ def batch_inference(
     
     # 2. Load models + feature specs
     print("\nLoading models...")
-    lstm_model, lstm_uri = load_latest_model_and_uri(lstm_model_name)
-    gru_model, gru_uri = load_latest_model_and_uri(gru_model_name)
-    lgbm_model, lgbm_uri = load_latest_model_and_uri(lightgbm_model_name)
+    lstm_model, lstm_uri = load_latest_model_and_uri(lstm_model_name, catalog=catalog)
+    gru_model, gru_uri = load_latest_model_and_uri(gru_model_name, catalog=catalog)
+    lgbm_model, lgbm_uri = load_latest_model_and_uri(lightgbm_model_name, catalog=catalog)
     
     print("\nLoading feature specifications...")
     lstm_features = load_feature_spec(lstm_uri, feature_table_name, target_col)

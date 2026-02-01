@@ -63,26 +63,6 @@ Gold Layer → Feature Store → Model Training → MLflow Registry → Inferenc
 
 ## Setup
 
-This section covers the complete setup process for the ML consumption layer, including prerequisites, Databricks job configuration, and verification steps.
-
-### Prerequisites
-
-Before setting up the ML layer, ensure you have:
-
-1. **Completed Data Pipeline**: The Gold layer must be populated with data
-   - Run the main data processing pipeline (Bronze → Silver → Gold)
-   - Verify Gold layer tables exist: `{catalog}.gold.iot_data`, `{catalog}.gold.dim_time`, `{catalog}.gold.dim_equipment`
-
-2. **Databricks Workspace Access**:
-   - Access to Databricks workspace with Unity Catalog enabled
-   - Permissions to create databases, tables, and jobs
-   - Access to MLflow (included in Databricks)
-
-3. **Databricks Repo Setup**:
-   - Code must be in a Databricks Repo (not workspace files)
-   - Repo path should be accessible to all job tasks
-
-
 ### Step 1: Verify Gold Layer Data
 
 First, ensure your Gold layer has data:
@@ -101,11 +81,6 @@ SELECT
     COUNT(*) as total_records
 FROM gold.iot_data;
 ```
-
-**Minimum Requirements:**
-- At least 1000 records for meaningful training
-- Data spanning multiple days/weeks for time-series models
-- Complete sensor readings (pH, TDS, temperature, humidity)
 
 ### Step 2: Create ML Training Job
 
@@ -192,11 +167,6 @@ DESCRIBE TABLE feature_store.sensor_features;
 - Fully connected layers for output
 - Dropout for regularization
 
-**Advantages:**
-- Faster training and inference
-- Lower memory usage
-- Similar performance to LSTM for many tasks
-
 **Use Cases:**
 - Real-time predictions
 - Resource-constrained environments
@@ -225,31 +195,6 @@ DESCRIBE TABLE feature_store.sensor_features;
 - `num_leaves`: Number of leaves (default: 31)
 - `learning_rate`: Learning rate (default: 0.05)
 - `num_boost_round`: Number of boosting rounds (default: 100)
-
-## MLflow Integration
-
-### Experiment Tracking
-
-All training runs are automatically logged to MLflow with:
-
-- **Parameters**: Model hyperparameters, training configuration
-- **Metrics**: Training and validation metrics (loss, MAE, RMSE, accuracy, etc.)
-- **Artifacts**: Model files, scalers, training logs
-- **Tags**: Model type, target column, experiment name
-
-### Model Registry
-
-**Automatic Registration:**
-- Models are automatically registered after training
-- Each training run creates a new model version
-- Models are tagged with metadata
-
-### MLflow UI
-
-Access MLflow UI in Databricks:
-1. Go to **Experiments** in the left sidebar
-2. Select your experiment (e.g., `hydroponics_lstm`)
-3. View runs, compare metrics, and manage models
 
 ### Training Parameters
 
@@ -298,22 +243,6 @@ The script writes predictions to the specified Delta table with the following co
 - `lightgbm_prediction` - LightGBM model predictions
 - `ensemble_avg` - Average of all three model predictions
 - `inference_timestamp` - Timestamp when inference was run
-
-## Model Versioning
-
-### Version Management
-
-**Automatic Versioning:**
-- Each training run creates a new model version
-- Versions are numbered sequentially (1, 2, 3, ...)
-- All versions are retained in the registry
-
-**Model Metadata:**
-- Training timestamp
-- Experiment name and run ID
-- Hyperparameters
-- Evaluation metrics
-- Model artifacts (weights, scalers, configs)
 
 ## Project Structure
 

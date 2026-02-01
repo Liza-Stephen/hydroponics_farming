@@ -252,41 +252,75 @@ def log_lightgbm_model(model, artifact_path="model", registered_model_name=None,
     return model_uri
 
 
-def get_latest_model_version(model_name):
-    """Get latest model version from MLflow model registry"""
+def get_latest_model_version(model_name, catalog=None):
+    """
+    Get latest model version from MLflow model registry
+    
+    Args:
+        model_name: Model name (can be simple name or full three-level Unity Catalog format)
+        catalog: Catalog name (optional, for constructing full path)
+    
+    Returns:
+        Tuple of (version_number, full_model_name) or (None, None) if not found
+    """
     client = MlflowClient()
-    try:
-        # Get all versions and return the latest one
-        versions = client.search_model_versions(f"name='{model_name}'")
-        if versions:
-            # Sort by version number (descending) and return the latest
-            latest = max(versions, key=lambda v: int(v.version))
-            return latest.version
-        return None
-    except Exception as e:
-        print(f"Error getting latest model version: {e}")
-        return None
+    
+    # Check if model_name is already in three-level format (catalog.schema.model)
+    if '.' in model_name and model_name.count('.') == 2:
+        # Already in full format
+        name_variants = [model_name]
+    else:
+        # Try multiple formats for Unity Catalog
+        name_variants = []
+        if catalog:
+            # Try with catalog prefix: catalog.default.model_name
+            name_variants.append(f"{catalog}.default.{model_name}")
+        # Try with default schema: default.model_name
+        name_variants.append(f"default.{model_name}")
+        # Try simple name as fallback
+        name_variants.append(model_name)
+    
+    for full_model_name in name_variants:
+        try:
+            versions = client.search_model_versions(f"name='{full_model_name}'")
+            if versions:
+                latest = max(versions, key=lambda v: int(v.version))
+                return latest.version, full_model_name
+        except Exception as e:
+            continue
+    
+    return None, None
 
 
-def load_model_from_registry(model_name, version=None):
+def load_model_from_registry(model_name, version=None, catalog=None):
     """
     Load model from MLflow model registry
     
     Args:
-        model_name: Name of the model
+        model_name: Name of the model (can be simple or full three-level format)
         version: Model version number (None = latest version)
+        catalog: Catalog name (optional, for constructing full path)
     
     Returns:
         Loaded model
     """
     if version is None:
         # Get latest version
-        version = get_latest_model_version(model_name)
+        version, full_model_name = get_latest_model_version(model_name, catalog=catalog)
         if version is None:
             raise ValueError(f"No versions found for model {model_name}")
-        print(f"Loading latest version {version} of {model_name}")
+        print(f"Loading latest version {version} of {full_model_name}")
+    else:
+        # Construct full model name if needed for Unity Catalog
+        if '.' in model_name and model_name.count('.') == 2:
+            full_model_name = model_name
+        else:
+            if catalog:
+                full_model_name = f"{catalog}.default.{model_name}"
+            else:
+                full_model_name = f"default.{model_name}"
     
-    model_uri = f"models:/{model_name}/{version}"
+    model_uri = f"models:/{full_model_name}/{version}"
     
     try:
         # Try PyTorch first
