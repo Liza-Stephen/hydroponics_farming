@@ -100,12 +100,17 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
     
     # Convert timestamp/datetime columns to ISO format strings (Snowflake doesn't support binding timestamps directly)
     import pandas as pd
+    import numpy as np
     for col in pandas_df.columns:
         if pd.api.types.is_datetime64_any_dtype(pandas_df[col]):
             # Convert to ISO format string (YYYY-MM-DD HH:MM:SS) that Snowflake can parse
-            pandas_df[col] = pandas_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-            # Replace 'NaT' (pandas null timestamp) with None
-            pandas_df[col] = pandas_df[col].replace('NaT', None)
+            # Handle NaT/None values properly - convert to None first, then format non-null values
+            pandas_df[col] = pandas_df[col].apply(
+                lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else None
+            )
+    
+    # Replace all remaining NaN/NaT values with None for proper SQL NULL handling
+    pandas_df = pandas_df.where(pd.notna(pandas_df), None)
     
     # Connect to Snowflake and load data
     conn = create_snowflake_connection(config)
@@ -127,8 +132,18 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
         # Write data to Snowflake using INSERT
         # For large datasets, consider using COPY INTO or Snowflake's bulk loading
         if len(pandas_df) > 0:
-            # Convert DataFrame to list of tuples (timestamps are now strings)
-            values = [tuple(row) for row in pandas_df.values]
+            # Convert DataFrame to list of tuples (ensure None for NULLs, not NaN/NaT)
+            values = []
+            for row in pandas_df.itertuples(index=False):
+                # Convert each value, handling None/NaN/NaT properly
+                row_values = []
+                for val in row:
+                    if pd.isna(val) if hasattr(pd, 'isna') else (val is None or (isinstance(val, float) and np.isnan(val))):
+                        row_values.append(None)
+                    else:
+                        row_values.append(val)
+                values.append(tuple(row_values))
+            
             placeholders = ', '.join(['?' for _ in pandas_df.columns])
             columns = ', '.join(pandas_df.columns)
             
@@ -193,7 +208,8 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
         if len(pandas_df) > 0:
             # For large datasets, insert in batches
             batch_size = 10000
-            values = [tuple(row) for row in pandas_df.values]
+            # Convert DataFrame to list of tuples (ensure None for NULLs)
+            values = [tuple(None if pd.isna(val) else val for val in row) for row in pandas_df.values]
             placeholders = ', '.join(['?' for _ in pandas_df.columns])
             columns = ', '.join(pandas_df.columns)
             insert_sql = f"INSERT INTO {snowflake_table_name} ({columns}) VALUES ({placeholders})"
