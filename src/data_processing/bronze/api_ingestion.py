@@ -46,8 +46,8 @@ def ingest_api_data(spark, json_dir, bronze_table_name, s3_bronze_path):
     if "records" in df.columns:
         df = df.select(explode(spark_col("records")).alias("record")).select("record.*")
     
-    # Select and normalize columns to match schema
-    df_normalized = df.select(
+    # Select and normalize columns to match schema (serverless-compatible, no RDD conversion)
+    df = df.select(
         spark_col("id").cast("string").alias("id"),
         spark_col("timestamp").cast("string").alias("timestamp"),
         spark_col("pH").cast("string").alias("pH"),
@@ -62,10 +62,6 @@ def ingest_api_data(spark, json_dir, bronze_table_name, s3_bronze_path):
         spark_col("humidifier").cast("string").alias("humidifier"),
         spark_col("ex_fan").cast("string").alias("ex_fan"),
     )
-    
-    # Apply schema to ensure consistency
-    schema = create_bronze_schema()
-    df = spark.createDataFrame(df_normalized.rdd, schema=schema)
     
     # Add metadata columns
     df = df.withColumn("ingestion_timestamp", current_timestamp()) \
