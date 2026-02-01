@@ -107,17 +107,18 @@ def run_api_ingestion(json_dir_path=None):
     spark, config = get_spark_session()
     
     # Read JSON directory file key from job parameters (sys.argv)
-    # Job parameters: sys.argv[1] = DATABRICKS_CATALOG, sys.argv[2] = JSON_DIR_FILE_KEY, sys.argv[3] = S3_BUCKET
+    # Job parameters: sys.argv[1] = DATABRICKS_CATALOG, sys.argv[2] = S3_BUCKET, sys.argv[3] = JSON_DIR_FILE_KEY
     # Construct full S3 path: s3://{S3_BUCKET}/{JSON_DIR_FILE_KEY}
     if json_dir_path is None:
-        if len(sys.argv) > 2 and len(sys.argv) > 3:
-            file_key = sys.argv[2]
+        if len(sys.argv) > 3:
+            # Bronze task with all parameters: sys.argv[3] = JSON_DIR_FILE_KEY
+            file_key = sys.argv[3]
             # Remove leading slash if present
             if file_key.startswith("/"):
                 file_key = file_key[1:]
             json_dir_path = f"s3://{config.s3_bucket}/{file_key}"
         else:
-            raise ValueError("JSON_DIR_FILE_KEY is required. Set it as job parameter (sys.argv[2]). The full S3 path will be constructed as s3://{S3_BUCKET}/{JSON_DIR_FILE_KEY}.")
+            raise ValueError("JSON_DIR_FILE_KEY is required. Set it as job parameter (sys.argv[3]). The full S3 path will be constructed as s3://{S3_BUCKET}/{JSON_DIR_FILE_KEY}.")
     
     bronze_table_name = create_bronze_table(spark, config)
     df = ingest_api_data(spark, json_dir_path, bronze_table_name, config.s3_bronze_path)
@@ -130,6 +131,6 @@ def run_api_ingestion(json_dir_path=None):
 
 
 if __name__ == "__main__":
-    # Parameters come from job configuration: [DATABRICKS_CATALOG, JSON_DIR_PATH]
+    # Parameters come from job configuration: [DATABRICKS_CATALOG, S3_BUCKET, JSON_DIR_FILE_KEY]
     # Config reads them automatically via sys.argv
     run_api_ingestion()
