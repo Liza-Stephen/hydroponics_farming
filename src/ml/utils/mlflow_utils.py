@@ -131,10 +131,20 @@ def log_pytorch_model(model, artifact_path="model", registered_model_name=None):
     Returns:
         model_uri
     """
-    model_uri = mlflow.pytorch.log_model(
+    model_info = mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path=artifact_path
     )
+    
+    # Extract model URI from ModelInfo object (newer MLflow versions return ModelInfo)
+    if hasattr(model_info, 'model_uri'):
+        model_uri = model_info.model_uri
+    elif isinstance(model_info, str):
+        model_uri = model_info
+    else:
+        # Fallback: construct URI from run_id and artifact_path
+        run_id = mlflow.active_run().info.run_id
+        model_uri = f"runs:/{run_id}/{artifact_path}"
     
     if registered_model_name:
         mlflow.register_model(model_uri, registered_model_name)
@@ -156,11 +166,21 @@ def log_lightgbm_model(model, artifact_path="model", registered_model_name=None,
     Returns:
         model_uri
     """
-    model_uri = mlflow.lightgbm.log_model(
+    model_info = mlflow.lightgbm.log_model(
         lgb_model=model,
         artifact_path=artifact_path,
         input_example=input_example
     )
+    
+    # Extract model URI from ModelInfo object (newer MLflow versions return ModelInfo)
+    if hasattr(model_info, 'model_uri'):
+        model_uri = model_info.model_uri
+    elif isinstance(model_info, str):
+        model_uri = model_info
+    else:
+        # Fallback: construct URI from run_id and artifact_path
+        run_id = mlflow.active_run().info.run_id
+        model_uri = f"runs:/{run_id}/{artifact_path}"
     
     if registered_model_name:
         mlflow.register_model(model_uri, registered_model_name)
