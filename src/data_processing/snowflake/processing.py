@@ -149,12 +149,6 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
             batch_size = 1000
             for i in range(0, len(values), batch_size):
                 batch = values[i:i + batch_size]
-
-                print("INSERT SQL:", insert_sql)
-                print("Placeholders:", insert_sql.count("%s"))
-                print("Row length:", len(batch[0]))
-                print("Sample row:", batch[0])
-                
                 cursor.executemany(insert_sql, batch)
                 conn.commit()
                 if len(values) > batch_size:
@@ -224,7 +218,7 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
             
             # Verify we have the right number of columns
             num_cols = len(pandas_df.columns)
-            placeholders = ', '.join(['?' for _ in range(num_cols)])
+            placeholders = ', '.join(['%s' for _ in range(num_cols)])
             columns = ', '.join(pandas_df.columns)
             insert_sql = f"INSERT INTO {snowflake_table_name} ({columns}) VALUES ({placeholders})"
             
