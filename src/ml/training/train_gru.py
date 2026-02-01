@@ -2,22 +2,16 @@
 Train GRU model for time-series forecasting
 """
 import sys
-from pathlib import Path
-
-# Add src directory to Python path for imports
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # points to src/
-sys.path.append(str(PROJECT_ROOT))
-
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 from pyspark.sql import SparkSession
 from config.databricks_config import get_spark_session
-from ml.feature_store import FeatureStoreManager
-from ml.models.gru_model import create_gru_model
-from ml.utils.data_preprocessing import create_sequences, scale_features, calculate_time_series_metrics
-from ml.utils.mlflow_utils import (
+from src.ml.feature_store import FeatureStoreManager
+from src.ml.models.gru_model import create_gru_model
+from src.ml.utils.data_preprocessing import create_sequences, scale_features, calculate_time_series_metrics
+from src.ml.utils.mlflow_utils import (
     setup_mlflow_experiment, log_model_parameters, log_model_metrics,
     log_pytorch_model
 )

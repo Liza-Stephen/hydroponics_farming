@@ -2,19 +2,13 @@
 Model inference script - load models from MLflow registry and make predictions
 """
 import sys
-from pathlib import Path
-
-# Add src directory to Python path for imports
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # points to src/
-sys.path.append(str(PROJECT_ROOT))
-
 import numpy as np
 import pandas as pd
 import torch
 from config.databricks_config import get_spark_session
-from ml.feature_store import FeatureStoreManager
-from ml.utils.mlflow_utils import load_model_from_registry
-from ml.utils.data_preprocessing import create_sequences, scale_features
+from src.ml.feature_store import FeatureStoreManager
+from src.ml.utils.mlflow_utils import load_model_from_registry
+from src.ml.utils.data_preprocessing import create_sequences, scale_features
 
 
 def predict_with_lstm_gru(

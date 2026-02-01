@@ -2,22 +2,16 @@
 Train LightGBM model for tabular classification/regression
 """
 import sys
-from pathlib import Path
-
-# Add src directory to Python path for imports
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # points to src/
-sys.path.append(str(PROJECT_ROOT))
-
 import numpy as np
 import pandas as pd
 from config.databricks_config import get_spark_session
-from ml.feature_store import FeatureStoreManager
-from ml.models.lightgbm_model import (
+from src.ml.feature_store import FeatureStoreManager
+from src.ml.models.lightgbm_model import (
     create_lightgbm_model, train_lightgbm_model,
     evaluate_classification_model, evaluate_regression_model
 )
-from ml.utils.data_preprocessing import prepare_tabular_features
-from ml.utils.mlflow_utils import (
+from src.ml.utils.data_preprocessing import prepare_tabular_features
+from src.ml.utils.mlflow_utils import (
     setup_mlflow_experiment, log_model_parameters, log_model_metrics,
     log_lightgbm_model
 )
@@ -25,7 +19,7 @@ from ml.utils.mlflow_utils import (
 
 def train_lightgbm(
     feature_table_name,
-    target_col="is_ph_optimal",
+    target_col="is_env_optimal",
     task_type="classification",
     num_leaves=31,
     learning_rate=0.05,
@@ -38,7 +32,7 @@ def train_lightgbm(
     
     Args:
         feature_table_name: Full feature table name
-        target_col: Target column name
+        target_col: Target column name (default: "is_env_optimal" - combined optimal indicator)
         task_type: "classification" or "regression"
         num_leaves: Number of leaves
         learning_rate: Learning rate
@@ -61,6 +55,28 @@ def train_lightgbm(
     # Convert to Pandas
     print("Converting to Pandas DataFrame...")
     df_pandas = df_features.toPandas()
+    
+    # Create combined environment optimal indicator if target is "is_env_optimal"
+    if target_col == "is_env_optimal":
+        print("Creating combined environment optimal indicator...")
+        optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
+        
+        # Check all optimal columns exist
+        missing_cols = [col for col in optimal_cols if col not in df_pandas.columns]
+        if missing_cols:
+            raise ValueError(f"Required optimal columns not found: {missing_cols}")
+        
+        # Create combined target: 1 if all optimal indicators are 1, 0 otherwise
+        df_pandas["is_env_optimal"] = (
+            (df_pandas["is_ph_optimal"] == 1) &
+            (df_pandas["is_tds_optimal"] == 1) &
+            (df_pandas["is_temp_optimal"] == 1) &
+            (df_pandas["is_humidity_optimal"] == 1)
+        ).astype(int)
+        
+        print(f"Environment optimal distribution:")
+        print(df_pandas["is_env_optimal"].value_counts())
+        print(f"Optimal rate: {df_pandas['is_env_optimal'].mean():.2%}")
     
     # Check target column exists
     if target_col not in df_pandas.columns:
@@ -163,7 +179,7 @@ if __name__ == "__main__":
     catalog = sys.argv[1]
     s3_bucket = sys.argv[2]  # Required for config
     feature_table_name = sys.argv[3] if len(sys.argv) > 3 else f"{catalog}.feature_store.sensor_features"
-    target_col = sys.argv[4] if len(sys.argv) > 4 else "is_ph_optimal"
+    target_col = sys.argv[4] if len(sys.argv) > 4 else "is_env_optimal"
     task_type = sys.argv[5] if len(sys.argv) > 5 else "classification"
     
     train_lightgbm(
