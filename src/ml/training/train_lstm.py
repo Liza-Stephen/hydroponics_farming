@@ -242,7 +242,14 @@ def train_lstm(
     
     # Log model to MLflow
     print(f"\nLogging model to MLflow...")
-    model_uri = log_pytorch_model(model, artifact_path="lstm_model", registered_model_name=registered_model_name)
+    # Create input example for signature (batch_size=1, sequence_length, input_size)
+    input_example = torch.FloatTensor(X_test_scaled[:1]).to(device)
+    model_uri = log_pytorch_model(
+        model, 
+        artifact_path="lstm_model", 
+        registered_model_name=registered_model_name,
+        input_example=input_example
+    )
     print(f"Model logged: {model_uri}")
     
     return model, scaler_X, scaler_y
@@ -255,7 +262,7 @@ if __name__ == "__main__":
     
     catalog = sys.argv[1]
     s3_bucket = sys.argv[2]  # Required for config
-    feature_table_name = sys.argv[3] if len(sys.argv) > 3 else f"{catalog}.feature_store.sensor_features"
+    feature_table_name = sys.argv[3]
     target_col = sys.argv[4] if len(sys.argv) > 4 else "ph_level"
     
     train_lstm(

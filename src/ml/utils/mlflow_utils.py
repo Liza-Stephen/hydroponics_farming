@@ -2,9 +2,11 @@
 MLflow utilities for experiment tracking and model registry
 """
 import numpy as np
+import torch
 import mlflow
 import mlflow.sklearn
 import mlflow.pytorch
+from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient
 from datetime import datetime
 
@@ -127,21 +129,48 @@ def log_model_metrics(metrics, step=None):
         mlflow.log_metrics(valid_metrics)
 
 
-def log_pytorch_model(model, artifact_path="model", registered_model_name=None):
+def log_pytorch_model(model, artifact_path="model", registered_model_name=None, input_example=None):
     """
-    Log PyTorch model to MLflow
+    Log PyTorch model to MLflow with signature (required for Unity Catalog)
     
     Args:
         model: PyTorch model
         artifact_path: Path to save the model artifact
         registered_model_name: Name for model registry (optional)
+        input_example: Example input tensor (optional, will be inferred if not provided)
     
     Returns:
         model_uri
     """
+    # Create input example if not provided
+    if input_example is None:
+        # Infer input shape from model's first layer or use a default
+        # For time-series models, we need (batch, sequence_length, features)
+        # Try to get shape from model if possible
+        try:
+            # Get a sample input by checking model parameters
+            # Default: (1, 24, 37) for time-series models
+            input_example = torch.randn(1, 24, 37)
+        except:
+            # Fallback: create a small sample tensor
+            input_example = torch.randn(1, 10, 10)
+    
+    # Get model output for signature inference
+    model.eval()
+    with torch.no_grad():
+        output_example = model(input_example)
+    
+    # Infer signature from input and output examples
+    signature = infer_signature(
+        input_example.numpy(),
+        output_example.numpy()
+    )
+    
     model_info = mlflow.pytorch.log_model(
         pytorch_model=model,
-        artifact_path=artifact_path
+        artifact_path=artifact_path,
+        signature=signature,
+        input_example=input_example.numpy()
     )
     
     # Extract model URI from ModelInfo object (newer MLflow versions return ModelInfo)
@@ -163,21 +192,47 @@ def log_pytorch_model(model, artifact_path="model", registered_model_name=None):
 
 def log_lightgbm_model(model, artifact_path="model", registered_model_name=None, input_example=None):
     """
-    Log LightGBM model to MLflow
+    Log LightGBM model to MLflow with signature (required for Unity Catalog)
     
     Args:
         model: LightGBM model
         artifact_path: Path to save the model artifact
         registered_model_name: Name for model registry (optional)
-        input_example: Example input for model signature (optional)
+        input_example: Example input for model signature (required for Unity Catalog)
     
     Returns:
         model_uri
     """
+    if input_example is None:
+        raise ValueError("input_example is required for Unity Catalog model registration. Provide a sample input DataFrame or array.")
+    
+    # Convert to pandas DataFrame if numpy array (for signature inference and MLflow)
+    import pandas as pd
+    if isinstance(input_example, np.ndarray):
+        # Create DataFrame from array for signature inference
+        input_df = pd.DataFrame(input_example)
+        output_example = model.predict(input_example)
+    elif isinstance(input_example, pd.DataFrame):
+        input_df = input_example
+        output_example = model.predict(input_example.values)
+    else:
+        input_df = input_example
+        output_example = model.predict(input_example)
+    
+    # Ensure output is 1D or 2D array for signature
+    if output_example.ndim == 1:
+        output_example = output_example.reshape(-1, 1)
+    elif output_example.ndim == 0:
+        output_example = np.array([[output_example]])
+    
+    # Infer signature from input and output examples
+    signature = infer_signature(input_df, output_example)
+    
     model_info = mlflow.lightgbm.log_model(
         lgb_model=model,
         artifact_path=artifact_path,
-        input_example=input_example
+        signature=signature,
+        input_example=input_df  # Pass DataFrame to MLflow
     )
     
     # Extract model URI from ModelInfo object (newer MLflow versions return ModelInfo)

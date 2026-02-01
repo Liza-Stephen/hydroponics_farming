@@ -211,7 +211,14 @@ def train_gru(
     
     # Log model to MLflow
     print(f"\nLogging model to MLflow...")
-    model_uri = log_pytorch_model(model, artifact_path="gru_model", registered_model_name=registered_model_name)
+    # Create input example for signature (batch_size=1, sequence_length, input_size)
+    input_example = torch.FloatTensor(X_test_scaled[:1]).to(device)
+    model_uri = log_pytorch_model(
+        model, 
+        artifact_path="gru_model", 
+        registered_model_name=registered_model_name,
+        input_example=input_example
+    )
     print(f"Model logged: {model_uri}")
     
     return model, scaler_X, scaler_y
