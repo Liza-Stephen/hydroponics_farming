@@ -61,6 +61,7 @@ def load_feature_spec(model_uri, feature_table_name, target_col=None, model=None
         List of feature column names
     """
     # For LightGBM models, try to get feature names directly from the model
+    is_pytorch_model = False
     if model is not None:
         try:
             import lightgbm as lgb
@@ -71,31 +72,43 @@ def load_feature_spec(model_uri, feature_table_name, target_col=None, model=None
                     return feature_names
         except Exception as e:
             print(f"Could not get feature names from model: {e}")
+        
+        # Check if it's a PyTorch model
+        try:
+            import torch
+            if isinstance(model, torch.nn.Module):
+                is_pytorch_model = True
+                print("PyTorch model detected, inferring features from feature table...")
+        except:
+            pass
     
     spark, config = get_spark_session()
     fs_manager = FeatureStoreManager(config.catalog)
     
-    # Try to get feature names from model signature
-    try:
-        model_info = mlflow.models.get_model_info(model_uri)
-        if hasattr(model_info, 'signature') and model_info.signature is not None:
-            if hasattr(model_info.signature, 'inputs') and model_info.signature.inputs is not None:
-                # Extract feature names from signature
-                feature_names = [input.name for input in model_info.signature.inputs.inputs]
-                if feature_names:
-                    # Check if feature names are integers (indicates unnamed columns from array)
-                    # If so, fall back to inferring from feature table
-                    try:
-                        # Try to convert first name to int - if it works, they're all likely integers
-                        int(feature_names[0])
-                        print(f"Model signature has integer column names, inferring from feature table...")
-                        # Fall through to feature table inference
-                    except (ValueError, TypeError):
-                        # Feature names are actual strings, use them
-                        print(f"Loaded {len(feature_names)} features from model signature")
-                        return feature_names
-    except Exception as e:
-        print(f"Could not load features from signature: {e}")
+    # Try to get feature names from model signature (skip for PyTorch models)
+    if not is_pytorch_model:
+        try:
+            model_info = mlflow.models.get_model_info(model_uri)
+            if hasattr(model_info, 'signature') and model_info.signature is not None:
+                if hasattr(model_info.signature, 'inputs') and model_info.signature.inputs is not None:
+                    # Extract feature names from signature
+                    feature_names = [input.name for input in model_info.signature.inputs.inputs]
+                    # Filter out None values
+                    feature_names = [name for name in feature_names if name is not None]
+                    if feature_names:
+                        # Check if feature names are integers (indicates unnamed columns from array)
+                        # If so, fall back to inferring from feature table
+                        try:
+                            # Try to convert first name to int - if it works, they're all likely integers
+                            int(feature_names[0])
+                            print(f"Model signature has integer column names, inferring from feature table...")
+                            # Fall through to feature table inference
+                        except (ValueError, TypeError):
+                            # Feature names are actual strings, use them
+                            print(f"Loaded {len(feature_names)} features from model signature")
+                            return feature_names
+        except Exception as e:
+            print(f"Could not load features from signature: {e}")
     
     # Fallback: infer from feature table
     print(f"Inferring features from feature table {feature_table_name}...")
