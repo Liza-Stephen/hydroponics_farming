@@ -127,13 +127,41 @@ def calculate_time_series_metrics(y_true, y_pred):
     """
     from sklearn.metrics import mean_absolute_error, mean_squared_error
     
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    # Convert to numpy arrays and flatten
+    y_true = np.array(y_true).flatten()
+    y_pred = np.array(y_pred).flatten()
+    
+    # Remove NaN and Inf values
+    valid_mask = np.isfinite(y_true) & np.isfinite(y_pred)
+    
+    if valid_mask.sum() == 0:
+        print("Warning: No valid values for metrics calculation (all NaN/Inf)")
+        return {
+            "mae": None,
+            "rmse": None,
+            "mape": None
+        }
+    
+    if valid_mask.sum() < len(y_true):
+        print(f"Warning: Removed {len(y_true) - valid_mask.sum()} invalid values (NaN/Inf) from metrics calculation")
+    
+    y_true_valid = y_true[valid_mask]
+    y_pred_valid = y_pred[valid_mask]
+    
+    if len(y_true_valid) == 0:
+        return {
+            "mae": None,
+            "rmse": None,
+            "mape": None
+        }
+    
+    mae = mean_absolute_error(y_true_valid, y_pred_valid)
+    rmse = np.sqrt(mean_squared_error(y_true_valid, y_pred_valid))
     
     # MAPE (Mean Absolute Percentage Error) - handle division by zero
-    mask = y_true != 0
+    mask = y_true_valid != 0
     if mask.sum() > 0:
-        mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+        mape = np.mean(np.abs((y_true_valid[mask] - y_pred_valid[mask]) / y_true_valid[mask])) * 100
     else:
         mape = np.nan
     

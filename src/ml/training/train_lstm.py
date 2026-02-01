@@ -69,10 +69,31 @@ def train_lstm(
     if target_col not in numeric_cols:
         raise ValueError(f"Target column {target_col} not found in features")
     
+    # Handle missing values before creating sequences
+    print("Checking for missing values...")
+    df_features = df_pandas[numeric_cols].copy()
+    missing_counts = df_features.isnull().sum()
+    if missing_counts.sum() > 0:
+        print(f"Found missing values in columns: {missing_counts[missing_counts > 0].to_dict()}")
+        # Forward fill, then backward fill, then fill with median
+        df_features = df_features.ffill().bfill()
+        # If still NaN, fill with median
+        for col in df_features.columns:
+            if df_features[col].isnull().sum() > 0:
+                median_val = df_features[col].median()
+                df_features[col] = df_features[col].fillna(median_val if not np.isnan(median_val) else 0)
+        print("Filled missing values using forward fill, backward fill, and median")
+    
+    # Verify no NaN values remain
+    if df_features.isnull().sum().sum() > 0:
+        print(f"Warning: Still have {df_features.isnull().sum().sum()} NaN values after filling")
+        # Last resort: fill with 0
+        df_features = df_features.fillna(0)
+    
     # Create sequences
     print(f"Creating sequences (length={sequence_length}, horizon={forecast_horizon})...")
     X, y = create_sequences(
-        df_pandas[numeric_cols],
+        df_features,
         sequence_length=sequence_length,
         target_col=target_col,
         forecast_horizon=forecast_horizon
@@ -173,8 +194,20 @@ def train_lstm(
             
             # Calculate metrics
             y_pred_scaled = val_outputs.cpu().numpy()
+            
+            # Handle potential NaN in predictions before inverse transform
+            if np.isnan(y_pred_scaled).any():
+                print(f"Warning: Found {np.isnan(y_pred_scaled).sum()} NaN values in predictions, replacing with 0")
+                y_pred_scaled = np.nan_to_num(y_pred_scaled, nan=0.0)
+            
             y_pred = scaler_y.inverse_transform(y_pred_scaled)
             y_true = scaler_y.inverse_transform(y_test_scaled)
+            
+            # Ensure no NaN after inverse transform
+            if np.isnan(y_pred).any() or np.isnan(y_true).any():
+                print(f"Warning: Found NaN after inverse transform - y_pred: {np.isnan(y_pred).sum()}, y_true: {np.isnan(y_true).sum()}")
+                y_pred = np.nan_to_num(y_pred, nan=0.0)
+                y_true = np.nan_to_num(y_true, nan=0.0)
             
             metrics = calculate_time_series_metrics(y_true.flatten(), y_pred.flatten())
             metrics["train_loss"] = avg_loss
@@ -182,8 +215,10 @@ def train_lstm(
             
             log_model_metrics(metrics, step=epoch + 1)
             
+            mae_str = f"{metrics['mae']:.4f}" if metrics.get('mae') is not None else "N/A"
+            rmse_str = f"{metrics['rmse']:.4f}" if metrics.get('rmse') is not None else "N/A"
             print(f"Epoch {epoch + 1}/{epochs} - Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}, "
-                  f"Val MAE: {metrics['mae']:.4f}, Val RMSE: {metrics['rmse']:.4f}")
+                  f"Val MAE: {mae_str}, Val RMSE: {rmse_str}")
             
             model.train()
     
