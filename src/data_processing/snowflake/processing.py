@@ -132,24 +132,29 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
         # Write data to Snowflake using INSERT
         # For large datasets, consider using COPY INTO or Snowflake's bulk loading
         if len(pandas_df) > 0:
-            # Convert DataFrame to list of tuples (ensure None for NULLs, not NaN/NaT)
-            values = []
-            for row in pandas_df.itertuples(index=False):
-                # Convert each value, handling None/NaN/NaT properly
-                row_values = []
-                for val in row:
-                    if pd.isna(val) if hasattr(pd, 'isna') else (val is None or (isinstance(val, float) and np.isnan(val))):
-                        row_values.append(None)
-                    else:
-                        row_values.append(val)
-                values.append(tuple(row_values))
+            # Convert DataFrame to list of tuples, ensuring proper NULL handling
+            # Use fillna to replace all NaN/NaT with None first
+            pandas_df_clean = pandas_df.fillna(None)
             
-            placeholders = ', '.join(['?' for _ in pandas_df.columns])
+            # Convert to list of tuples - each row becomes a tuple
+            values = [tuple(row) for row in pandas_df_clean.values]
+            
+            # Verify we have the right number of columns
+            num_cols = len(pandas_df.columns)
+            placeholders = ', '.join(['?' for _ in range(num_cols)])
             columns = ', '.join(pandas_df.columns)
             
             insert_sql = f"INSERT INTO {snowflake_table_name} ({columns}) VALUES ({placeholders})"
-            cursor.executemany(insert_sql, values)
-            conn.commit()
+            
+            # Insert in smaller batches to avoid issues
+            batch_size = 1000
+            for i in range(0, len(values), batch_size):
+                batch = values[i:i + batch_size]
+                cursor.executemany(insert_sql, batch)
+                conn.commit()
+                if len(values) > batch_size:
+                    print(f"  - Inserted batch {i//batch_size + 1} ({len(batch)} records)")
+            
             print(f"  - Inserted {len(pandas_df)} records into {snowflake_table_name}")
         
     finally:
@@ -206,14 +211,21 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
         
         # Batch insert (for large tables, consider using COPY INTO with S3 staging)
         if len(pandas_df) > 0:
-            # For large datasets, insert in batches
-            batch_size = 10000
-            # Convert DataFrame to list of tuples (ensure None for NULLs)
-            values = [tuple(None if pd.isna(val) else val for val in row) for row in pandas_df.values]
-            placeholders = ', '.join(['?' for _ in pandas_df.columns])
+            # Convert DataFrame to list of tuples, ensuring proper NULL handling
+            # Use fillna to replace all NaN/NaT with None first
+            pandas_df_clean = pandas_df.fillna(None)
+            
+            # Convert to list of tuples - each row becomes a tuple
+            values = [tuple(row) for row in pandas_df_clean.values]
+            
+            # Verify we have the right number of columns
+            num_cols = len(pandas_df.columns)
+            placeholders = ', '.join(['?' for _ in range(num_cols)])
             columns = ', '.join(pandas_df.columns)
             insert_sql = f"INSERT INTO {snowflake_table_name} ({columns}) VALUES ({placeholders})"
             
+            # For large datasets, insert in batches
+            batch_size = 10000
             for i in range(0, len(values), batch_size):
                 batch = values[i:i + batch_size]
                 cursor.executemany(insert_sql, batch)
