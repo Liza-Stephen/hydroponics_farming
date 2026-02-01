@@ -149,6 +149,12 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
             batch_size = 1000
             for i in range(0, len(values), batch_size):
                 batch = values[i:i + batch_size]
+                
+                print("INSERT SQL:", insert_sql)
+                print("Placeholders:", insert_sql.count("%s"))
+                print("Row length:", len(batch[0]))
+                print("Sample row:", batch[0])
+                
                 cursor.executemany(insert_sql, batch)
                 conn.commit()
                 if len(values) > batch_size:
