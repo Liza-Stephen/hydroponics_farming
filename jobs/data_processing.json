@@ -77,20 +77,19 @@
       "spark_python_task": {
         "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/snowflake/processing.py",
         "parameters": [
-          "{{job.parameters.DATABRICKS_CATALOG}}",
-          "{{job.parameters.S3_BUCKET}}",
-          "{{job.parameters.SNOWFLAKE_ACCOUNT}}",
-          "{{job.parameters.SNOWFLAKE_USER}}",
-          "{{job.parameters.SNOWFLAKE_PASSWORD}}",
-          "{{job.parameters.SNOWFLAKE_WAREHOUSE}}",
-          "{{job.parameters.SNOWFLAKE_DATABASE}}",
-          "{{job.parameters.SNOWFLAKE_SCHEMA}}"
+          "hydroponics",
+          "hydroponics-data",
+          "GTNZFKD-YP25170",
+          "databricks_user",
+          "qwerty123",
+          "HYDRO_WH",
+          "HYDROPONICS_DB",
+          "ANALYTICS"
         ]
       },
       "timeout_seconds": 0,
       "email_notifications": {},
-      "webhook_notifications": {},
-      "environment_key": "Default"
+      "environment_key": "snowflake_env"
     }
   ],
   "queue": {
@@ -100,6 +99,15 @@
     {
       "environment_key": "Default",
       "spec": {
+        "environment_version": "4"
+      }
+    },
+    {
+      "environment_key": "snowflake_env",
+      "spec": {
+        "dependencies": [
+          "snowflake"
+        ],
         "environment_version": "4"
       }
     }
