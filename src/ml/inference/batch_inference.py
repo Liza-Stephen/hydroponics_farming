@@ -47,7 +47,7 @@ def load_latest_model_and_uri(model_name, catalog=None):
             raise ValueError(f"Could not load model {model_name} from registry: {e}")
 
 
-def load_feature_spec(model_uri, feature_table_name, target_col=None):
+def load_feature_spec(model_uri, feature_table_name, target_col=None, model=None):
     """
     Load feature specification from model or infer from feature table
     
@@ -55,10 +55,23 @@ def load_feature_spec(model_uri, feature_table_name, target_col=None):
         model_uri: MLflow model URI
         feature_table_name: Feature table name
         target_col: Target column name (to exclude)
+        model: Loaded model object (optional, for LightGBM to get feature names directly)
     
     Returns:
         List of feature column names
     """
+    # For LightGBM models, try to get feature names directly from the model
+    if model is not None:
+        try:
+            import lightgbm as lgb
+            if isinstance(model, lgb.Booster):
+                feature_names = model.feature_name()
+                if feature_names:
+                    print(f"Loaded {len(feature_names)} features from LightGBM model")
+                    return feature_names
+        except Exception as e:
+            print(f"Could not get feature names from model: {e}")
+    
     spark, config = get_spark_session()
     fs_manager = FeatureStoreManager(config.catalog)
     
@@ -153,9 +166,9 @@ def batch_inference(
     lgbm_model, lgbm_uri = load_latest_model_and_uri(lightgbm_model_name, catalog=catalog)
     
     print("\nLoading feature specifications...")
-    lstm_features = load_feature_spec(lstm_uri, feature_table_name, target_col)
-    gru_features = load_feature_spec(gru_uri, feature_table_name, target_col)
-    lgbm_features = load_feature_spec(lgbm_uri, feature_table_name, target_col)
+    lstm_features = load_feature_spec(lstm_uri, feature_table_name, target_col, model=lstm_model)
+    gru_features = load_feature_spec(gru_uri, feature_table_name, target_col, model=gru_model)
+    lgbm_features = load_feature_spec(lgbm_uri, feature_table_name, target_col, model=lgbm_model)
     
     # Sanity check
     assert lstm_features == gru_features, "LSTM and GRU feature specs differ!"
@@ -164,6 +177,28 @@ def batch_inference(
     
     # 3. ----- LightGBM inference (tabular) -----
     print("\nRunning LightGBM inference...")
+    
+    # Validate feature count matches model expectations
+    try:
+        import lightgbm as lgb
+        if isinstance(lgbm_model, lgb.Booster):
+            expected_features = lgbm_model.num_feature()
+            if len(lgbm_features) != expected_features:
+                print(f"WARNING: Feature count mismatch!")
+                print(f"  Model expects: {expected_features} features")
+                print(f"  Provided: {len(lgbm_features)} features")
+                print(f"  Feature names: {lgbm_features[:10]}..." if len(lgbm_features) > 10 else f"  Feature names: {lgbm_features}")
+                raise ValueError(f"Feature count mismatch: model expects {expected_features} features, got {len(lgbm_features)}")
+    except Exception as e:
+        if "mismatch" in str(e).lower():
+            raise
+        # If we can't check, continue (might not be LightGBM model)
+    
+    # Check if all features exist in the dataframe
+    missing_features = [f for f in lgbm_features if f not in pdf.columns]
+    if missing_features:
+        raise ValueError(f"Missing features in dataframe: {missing_features[:10]}..." if len(missing_features) > 10 else f"Missing features: {missing_features}")
+    
     X_tabular = pdf[lgbm_features].fillna(0).astype("float32")
     pdf["lightgbm_prediction"] = lgbm_model.predict(X_tabular.values)
     print(f"LightGBM predictions: {len(pdf['lightgbm_prediction'])} samples")

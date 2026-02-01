@@ -58,7 +58,8 @@ def train_lightgbm_model(
     num_boost_round=100,
     early_stopping_rounds=10,
     verbose_eval=10,
-    class_weight=None
+    class_weight=None,
+    feature_name=None
 ):
     """
     Train LightGBM model
@@ -73,16 +74,17 @@ def train_lightgbm_model(
         early_stopping_rounds: Early stopping rounds
         verbose_eval: Verbosity level
         class_weight: Dictionary with class weights {0: weight0, 1: weight1} or None
+        feature_name: List of feature names (optional)
     
     Returns:
         Trained model
     """
-    train_data = lgb.Dataset(X_train, label=y_train, weight=None)
+    train_data = lgb.Dataset(X_train, label=y_train, weight=None, feature_name=feature_name)
     
     # Apply class weights if provided
     if class_weight is not None:
         sample_weights = np.array([class_weight.get(int(label), 1.0) for label in y_train])
-        train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights)
+        train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights, feature_name=feature_name)
     
     valid_sets = [train_data]
     valid_names = ["train"]

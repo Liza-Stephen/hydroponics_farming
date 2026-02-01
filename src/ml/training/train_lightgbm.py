@@ -142,7 +142,8 @@ def train_lightgbm(
         num_boost_round=n_rounds,
         early_stopping_rounds=10 if X_val is not None else None,
         verbose_eval=10,
-        class_weight=class_weight
+        class_weight=class_weight,
+        feature_name=feature_names  # Pass feature names so they're stored in the model
     )
     
     # Evaluate on test set
