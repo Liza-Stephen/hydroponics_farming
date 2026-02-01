@@ -57,7 +57,8 @@ def train_lightgbm_model(
     params=None,
     num_boost_round=100,
     early_stopping_rounds=10,
-    verbose_eval=10
+    verbose_eval=10,
+    class_weight=None
 ):
     """
     Train LightGBM model
@@ -71,17 +72,26 @@ def train_lightgbm_model(
         num_boost_round: Number of boosting rounds
         early_stopping_rounds: Early stopping rounds
         verbose_eval: Verbosity level
+        class_weight: Dictionary with class weights {0: weight0, 1: weight1} or None
     
     Returns:
         Trained model
     """
-    train_data = lgb.Dataset(X_train, label=y_train)
+    train_data = lgb.Dataset(X_train, label=y_train, weight=None)
+    
+    # Apply class weights if provided
+    if class_weight is not None:
+        sample_weights = np.array([class_weight.get(int(label), 1.0) for label in y_train])
+        train_data = lgb.Dataset(X_train, label=y_train, weight=sample_weights)
     
     valid_sets = [train_data]
     valid_names = ["train"]
     
     if X_val is not None and y_val is not None:
-        val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
+        val_weights = None
+        if class_weight is not None:
+            val_weights = np.array([class_weight.get(int(label), 1.0) for label in y_val])
+        val_data = lgb.Dataset(X_val, label=y_val, reference=train_data, weight=val_weights)
         valid_sets.append(val_data)
         valid_names.append("valid")
     
@@ -100,7 +110,7 @@ def train_lightgbm_model(
     return model
 
 
-def evaluate_classification_model(model, X_test, y_test):
+def evaluate_classification_model(model, X_test, y_test, verbose=True):
     """
     Evaluate LightGBM classification model
     
@@ -108,6 +118,7 @@ def evaluate_classification_model(model, X_test, y_test):
         model: Trained LightGBM model
         X_test: Test features
         y_test: Test labels
+        verbose: Whether to print detailed diagnostics
     
     Returns:
         Dictionary of metrics
@@ -129,6 +140,31 @@ def evaluate_classification_model(model, X_test, y_test):
         except:
             pass
     
+    # Print confusion matrix and class distribution for diagnostics
+    if verbose:
+        from sklearn.metrics import confusion_matrix
+        cm = confusion_matrix(y_test, y_pred)
+        
+        print(f"\nClass Distribution (Test Set):")
+        print(f"  Class 0 (Not Optimal): {(y_test == 0).sum()} samples ({(y_test == 0).mean():.2%})")
+        print(f"  Class 1 (Optimal): {(y_test == 1).sum()} samples ({(y_test == 1).mean():.2%})")
+        
+        print(f"\nConfusion Matrix:")
+        print(f"  True Negatives:  {cm[0,0]}")
+        print(f"  False Positives: {cm[0,1]}")
+        print(f"  False Negatives: {cm[1,0]}")
+        print(f"  True Positives:  {cm[1,1]}")
+        
+        print(f"\nPredictions:")
+        print(f"  Predicted 0: {(y_pred == 0).sum()} samples")
+        print(f"  Predicted 1: {(y_pred == 1).sum()} samples")
+        
+        # Check if model is just predicting all negatives
+        if (y_pred == 0).all():
+            print(f"\n⚠️  WARNING: Model predicts all negatives!")
+            print("   This is likely due to extreme class imbalance.")
+            print("   Consider using class weights or different evaluation metrics.")
+    
     # Warning for suspiciously perfect metrics (potential data leakage or overfitting)
     perfect_threshold = 0.9999
     if all(v >= perfect_threshold for k, v in metrics.items() if k != "roc_auc"):
@@ -141,11 +177,13 @@ def evaluate_classification_model(model, X_test, y_test):
         print("  2. Overfitting: Model memorized training patterns")
         print("  3. Test set issues: Too small or same as training set")
         print("  4. Target directly derivable from features")
+        print("  5. Extreme class imbalance: Model predicts majority class")
         print("\nRecommendations:")
         print("  - Check if target column or related columns are in feature set")
         print("  - Verify train/test split is correct and independent")
         print("  - Review feature importance for suspicious patterns")
         print("  - Consider cross-validation to verify performance")
+        print("  - For imbalanced data, use class weights or different metrics")
         print("="*60 + "\n")
     
     return metrics

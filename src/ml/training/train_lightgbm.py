@@ -77,11 +77,24 @@ def train_lightgbm(
         
         # Exclude individual optimal columns from features to prevent data leakage
         exclude_from_features = optimal_cols
-        print(f"Excluding optimal indicator columns from features to prevent data leakage: {exclude_from_features}")
         
-        print(f"Environment optimal distribution:")
+        # Also exclude raw sensor values that directly determine optimality
+        # These create data leakage because the model can learn the exact thresholds
+        raw_sensor_cols = ["ph_level", "tds_level", "air_temperature", "air_humidity"]
+        exclude_from_features.extend(raw_sensor_cols)
+        
+        print(f"Excluding optimal indicator columns from features to prevent data leakage:")
+        print(f"  - Optimal indicators: {optimal_cols}")
+        print(f"  - Raw sensor values (determine optimality): {raw_sensor_cols}")
+        
+        print(f"\nEnvironment optimal distribution:")
         print(df_pandas["is_env_optimal"].value_counts())
         print(f"Optimal rate: {df_pandas['is_env_optimal'].mean():.2%}")
+        
+        # Warn about extreme class imbalance
+        if df_pandas['is_env_optimal'].mean() < 0.01:
+            print(f"\n⚠️  WARNING: Extreme class imbalance detected ({df_pandas['is_env_optimal'].mean():.2%} positive)")
+            print("   Consider using class weights, different metrics, or a different target variable.")
     
     # Check target column exists
     if target_col not in df_pandas.columns:
@@ -130,6 +143,23 @@ def train_lightgbm(
     }
     log_model_parameters(mlflow_params)
     
+    # Calculate class weights for imbalanced datasets
+    class_weight = None
+    if task_type == "classification":
+        from sklearn.utils.class_weight import compute_class_weight
+        classes = np.unique(y_train_fit.values)
+        class_weights = compute_class_weight('balanced', classes=classes, y=y_train_fit.values)
+        class_weight = dict(zip(classes, class_weights))
+        
+        # Only use class weights if imbalance is significant
+        pos_ratio = (y_train_fit.values == 1).mean() if len(classes) == 2 else None
+        if pos_ratio is not None and (pos_ratio < 0.1 or pos_ratio > 0.9):
+            print(f"\nUsing class weights to handle imbalance:")
+            print(f"  Class 0 weight: {class_weight[0]:.4f}")
+            print(f"  Class 1 weight: {class_weight[1]:.4f}")
+        else:
+            class_weight = None  # Don't use weights if balanced enough
+    
     # Train model
     print(f"\nTraining LightGBM model ({task_type})...")
     model = train_lightgbm_model(
@@ -140,32 +170,48 @@ def train_lightgbm(
         params=params,
         num_boost_round=n_rounds,
         early_stopping_rounds=10 if X_val is not None else None,
-        verbose_eval=10
+        verbose_eval=10,
+        class_weight=class_weight
     )
     
     # Evaluate on test set
     print("\nEvaluating on test set...")
     if task_type == "classification":
-        test_metrics = evaluate_classification_model(model, X_test.values, y_test.values)
+        test_metrics = evaluate_classification_model(model, X_test.values, y_test.values, verbose=True)
     else:
         test_metrics = evaluate_regression_model(model, X_test.values, y_test.values)
     
-    # Verify no data leakage (optimal columns should be excluded)
+    # Verify no data leakage (optimal columns and raw sensors should be excluded)
     if target_col == "is_env_optimal":
         optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
-        leakage_check = [col for col in optimal_cols if col in feature_names]
-        if leakage_check:
+        raw_sensor_cols = ["ph_level", "tds_level", "air_temperature", "air_humidity"]
+        
+        leakage_check_optimal = [col for col in optimal_cols if col in feature_names]
+        leakage_check_raw = [col for col in raw_sensor_cols if col in feature_names]
+        
+        if leakage_check_optimal or leakage_check_raw:
             print("\n" + "!"*60)
             print("WARNING: Potential Data Leakage Detected!")
             print("!"*60)
-            print(f"The following optimal indicator columns are still in the feature set:")
-            for col in leakage_check:
-                print(f"  - {col}")
-            print("\nThese columns are used to create the target 'is_env_optimal'.")
-            print("They should have been excluded from features to prevent data leakage.")
+            if leakage_check_optimal:
+                print(f"The following optimal indicator columns are still in the feature set:")
+                for col in leakage_check_optimal:
+                    print(f"  - {col}")
+            if leakage_check_raw:
+                print(f"The following raw sensor values are still in the feature set:")
+                for col in leakage_check_raw:
+                    print(f"  - {col}")
+                print("\nThese raw values directly determine the optimal indicators via thresholds:")
+                print("  - ph_level (5.5-6.5) → is_ph_optimal")
+                print("  - tds_level (800-1200) → is_tds_optimal")
+                print("  - air_temperature (20-28) → is_temp_optimal")
+                print("  - air_humidity (40-70) → is_humidity_optimal")
+            print("\nThese should have been excluded from features to prevent data leakage.")
             print("!"*60 + "\n")
         else:
-            print(f"\n✓ Data leakage check passed: Optimal indicator columns excluded from features.")
+            print(f"\n✓ Data leakage check passed:")
+            print(f"  - Optimal indicator columns excluded: {optimal_cols}")
+            print(f"  - Raw sensor values excluded: {raw_sensor_cols}")
     
     # Log metrics
     log_model_metrics(test_metrics)
