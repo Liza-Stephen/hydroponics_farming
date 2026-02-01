@@ -182,8 +182,10 @@ def train_gru(
             
             log_model_metrics(metrics, step=epoch + 1)
             
+            mae_str = f"{metrics['mae']:.4f}" if metrics.get('mae') is not None else "N/A"
+            rmse_str = f"{metrics['rmse']:.4f}" if metrics.get('rmse') is not None else "N/A"
             print(f"Epoch {epoch + 1}/{epochs} - Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}, "
-                  f"Val MAE: {metrics['mae']:.4f}, Val RMSE: {metrics['rmse']:.4f}")
+                  f"Val MAE: {mae_str}, Val RMSE: {rmse_str}")
             
             model.train()
     
@@ -200,9 +202,11 @@ def train_gru(
     log_model_metrics(final_metrics, step=epochs)
     
     print(f"\nFinal Test Metrics:")
-    print(f"  MAE: {final_metrics['mae']:.4f}")
-    print(f"  RMSE: {final_metrics['rmse']:.4f}")
-    if final_metrics['mape']:
+    if final_metrics.get('mae') is not None:
+        print(f"  MAE: {final_metrics['mae']:.4f}")
+    if final_metrics.get('rmse') is not None:
+        print(f"  RMSE: {final_metrics['rmse']:.4f}")
+    if final_metrics.get('mape') is not None:
         print(f"  MAPE: {final_metrics['mape']:.2f}%")
     
     # Log model to MLflow

@@ -1,6 +1,7 @@
 """
 MLflow utilities for experiment tracking and model registry
 """
+import numpy as np
 import mlflow
 import mlflow.sklearn
 import mlflow.pytorch
@@ -113,10 +114,17 @@ def log_model_parameters(params):
 
 def log_model_metrics(metrics, step=None):
     """Log model metrics to MLflow"""
+    # Filter out None values - MLflow cannot log None metrics
+    valid_metrics = {k: v for k, v in metrics.items() if v is not None and not (isinstance(v, float) and np.isnan(v))}
+    
+    if not valid_metrics:
+        print("Warning: No valid metrics to log (all values are None or NaN)")
+        return
+    
     if step is not None:
-        mlflow.log_metrics(metrics, step=step)
+        mlflow.log_metrics(valid_metrics, step=step)
     else:
-        mlflow.log_metrics(metrics)
+        mlflow.log_metrics(valid_metrics)
 
 
 def log_pytorch_model(model, artifact_path="model", registered_model_name=None):
