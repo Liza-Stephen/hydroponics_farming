@@ -9,3 +9,8 @@ venv/
 # OS
 .DS_Store
 
+# DVC
+.dvc/cache/
+.dvc/tmp/
+/data_splits
+/api_data

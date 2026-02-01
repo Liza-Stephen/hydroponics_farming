@@ -1,0 +1,6 @@
+[core]
+    remote = s3
+['remote "s3"']
+    url = s3://hydroponics-data/dvc-storage
+['remote "local"']
+    url = .dvc/cache
