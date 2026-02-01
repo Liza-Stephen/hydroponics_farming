@@ -1,0 +1,95 @@
+{
+  "name": "ML Inference Pipeline",
+  "email_notifications": {
+    "on_failure": [],
+    "on_success": [],
+    "on_start": []
+  },
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "batch_inference",
+      "description": "Run batch inference using all models (LSTM, GRU, LightGBM)",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/inference/batch_inference.py",
+        "parameters": [
+          "${job.dynamic.DATABRICKS_CATALOG}",
+          "${job.dynamic.S3_BUCKET}",
+          "${job.dynamic.FEATURE_TABLE_NAME}",
+          "${job.dynamic.LSTM_MODEL_NAME}",
+          "${job.dynamic.GRU_MODEL_NAME}",
+          "${job.dynamic.LIGHTGBM_MODEL_NAME}",
+          "${job.dynamic.OUTPUT_TABLE_NAME}",
+          "${job.dynamic.SEQUENCE_LENGTH}",
+          "${job.dynamic.TARGET_COL}"
+        ]
+      },
+      "libraries": [],
+      "compute": [
+        {
+          "compute_key": "serverless"
+        }
+      ],
+      "timeout_seconds": 0,
+      "max_retries": 0,
+      "min_retry_interval_millis": 0,
+      "retry_on_timeout": false
+    }
+  ],
+  "format": "MULTI_TASK",
+  "job_clusters": [
+    {
+      "job_cluster_key": "serverless",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "spark_conf": {
+          "spark.databricks.cluster.profile": "serverless"
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "DATABRICKS_CATALOG",
+      "default": "hydroponics"
+    },
+    {
+      "name": "S3_BUCKET",
+      "default": "hydroponics-data"
+    },
+    {
+      "name": "LSTM_MODEL_NAME",
+      "default": "hydroponics_lstm_forecast"
+    },
+    {
+      "name": "GRU_MODEL_NAME",
+      "default": "hydroponics_gru_forecast"
+    },
+    {
+      "name": "LIGHTGBM_MODEL_NAME",
+      "default": "hydroponics_lightgbm_classifier"
+    },
+    {
+      "name": "FEATURE_TABLE_NAME",
+      "default": "hydroponics.feature_store.sensor_features"
+    },
+    {
+      "name": "OUTPUT_TABLE_NAME",
+      "default": "hydroponics.predictions.batch_predictions"
+    },
+    {
+      "name": "SEQUENCE_LENGTH",
+      "default": "24"
+    },
+    {
+      "name": "TARGET_COL",
+      "default": "ph_level"
+    }
+  ],
+  "run_as": {
+    "user_name": null,
+    "service_principal_name": null
+  },
+  "tags": {}
+}

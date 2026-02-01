@@ -119,55 +119,16 @@ FROM gold.iot_data;
      - Type: Python script
      - Path: `src/ml/training/train_lstm.py`
      - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `ph_level`
-     - Cluster: GPU cluster recommended
    - **Task 3: train_gru** (depends on create_feature_store)
      - Type: Python script
      - Path: `src/ml/training/train_gru.py`
      - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `ph_level`
-     - Cluster: GPU cluster recommended
    - **Task 4: train_lightgbm** (depends on create_feature_store)
      - Type: Python script
      - Path: `src/ml/training/train_lightgbm.py`
      - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `is_env_optimal`
-     - Cluster: CPU cluster is sufficient
 
-### Step 3: Run ML Training Job
-
-**First Run (Create Feature Store and Train Models):**
-
-**Via UI:**
-1. Go to **Workflows** → **Jobs**
-2. Find your `ML Training Pipeline` job
-3. Click **Run Now**
-4. Set job parameters:
-   ```json
-   {
-     "DATABRICKS_CATALOG": "hydroponics",
-     "S3_BUCKET": "hydroponics-data"
-   }
-   ```
-5. Click **Run**
-
-**Via CLI:**
-```bash
-databricks jobs run-now <job-id> --json '{
-  "job_parameters": {
-    "DATABRICKS_CATALOG": "hydroponics",
-    "S3_BUCKET": "hydroponics-data"
-  }
-}'
-```
-
-**Job Execution Flow:**
-1. **create_feature_store** task runs first
-   - Creates `{catalog}.feature_store` database
-   - Creates `sensor_features` feature table
-   - Computes all engineered features from Gold layer
-2. **train_lstm**, **train_gru**, and **train_lightgbm** run in parallel (after feature store completes)
-   - Each model trains independently
-   - Models are registered in MLflow automatically
-
-### Step 4: Verify Setup
+### Step 3: Verify Setup
 
 **1. Check Feature Store:**
 ```sql
@@ -191,173 +152,12 @@ DESCRIBE TABLE feature_store.sensor_features;
   - `hydroponics_lstm_forecast`
   - `hydroponics_gru_forecast`
   - `hydroponics_lightgbm_classifier`
-- Each model should have version 1 in "None" stage
+- Each model should have version 1 registered
 
 **4. Verify Job Run:**
 - Go to **Workflows** → **Jobs** → Your job → **Runs**
 - Check that all tasks completed successfully
 - Review logs for any warnings or errors
-
-### Step 5: Update Feature Store (Ongoing)
-
-After the initial setup, update the Feature Store when new data arrives:
-
-**Option 1: Re-run Feature Store Task**
-```bash
-# Run only the feature store task
-databricks jobs run-now <job-id> --json '{
-  "job_parameters": {
-    "DATABRICKS_CATALOG": "hydroponics",
-    "S3_BUCKET": "hydroponics-data"
-  }
-}' --task-keys create_feature_store
-```
-
-**Option 2: Schedule Feature Store Updates**
-- Add a schedule to your job to run feature store task daily
-- Or create a separate job that only runs feature store updates
-
-**Option 3: Programmatic Update**
-```python
-from ml.feature_store import create_feature_store
-
-# Update feature store
-create_feature_store(
-    catalog="hydroponics",
-    gold_table_name="hydroponics.gold.iot_data",
-    feature_table_name="sensor_features"
-)
-```
-
-### Step 6: Configure Model Retraining (Optional)
-
-**Schedule Regular Retraining:**
-1. Go to your ML training job
-2. Click **Settings** → **Schedule**
-3. Configure schedule (e.g., weekly, monthly)
-4. Set job parameters
-
-**Manual Retraining:**
-- Re-run the entire job to retrain all models
-- Or run individual training tasks to retrain specific models
-
-### Troubleshooting Setup
-
-**Issue: Feature Store Creation Fails**
-- **Error**: "Gold table not found"
-- **Solution**: Ensure Gold layer pipeline has completed successfully
-
-**Issue: Training Fails with "Not enough data"**
-- **Error**: "Need at least {sequence_length} rows"
-- **Solution**: Ensure Gold layer has sufficient data (recommended: 1000+ records)
-
-**Issue: Model Registration Fails**
-- **Error**: "MLflow experiment not found"
-- **Solution**: MLflow is automatically available in Databricks, check workspace permissions
-
-**Issue: Serverless Compute Not Available**
-- **Error**: "Serverless compute not enabled"
-- **Solution**: 
-  - Enable serverless compute in your Databricks workspace (admin required)
-  - Or switch to traditional clusters by replacing `"compute"` with `"new_cluster"` in job JSON
-
-**Issue: Training is Slow (Serverless CPU)**
-- **Observation**: LSTM/GRU training takes a long time
-- **Solution**: 
-  - This is expected on serverless CPU - training will complete but slower than GPU
-  - Consider reducing `epochs` or `batch_size` for faster iteration
-  - For production training, consider using traditional GPU clusters if available
-
-**Issue: Repo Path Not Found**
-- **Error**: "File not found: /Repos/..."
-- **Solution**: Update all repo paths in `jobs/ml_training.json` to match your actual repo path
-
-### Next Steps
-
-After successful setup:
-1. **Review Models**: Check model metrics in MLflow UI
-2. **Promote Models**: Move best models to Production stage
-3. **Set Up Inference**: Configure inference jobs or notebooks
-4. **Monitor Performance**: Set up monitoring for production models
-5. **Schedule Updates**: Configure regular feature store updates and model retraining
-
-## Feature Store
-
-### Overview
-
-The Feature Store creates engineered features from the Gold layer fact table, providing a centralized repository for ML features.
-
-### Features Created
-
-**Raw Sensor Readings:**
-- `ph_level`: pH level
-- `tds_level`: Total Dissolved Solids
-- `water_level`: Water level
-- `air_temperature`: Air temperature (DHT sensor)
-- `air_humidity`: Air humidity (DHT sensor)
-- `water_temperature`: Water temperature
-
-**Equipment State Features:**
-- `ph_reducer_state`: pH reducer on/off (0/1)
-- `add_water_state`: Water addition system on/off (0/1)
-- `nutrients_adder_state`: Nutrient addition system on/off (0/1)
-- `humidifier_state`: Humidifier on/off (0/1)
-- `ex_fan_state`: Exhaust fan on/off (0/1)
-
-**Optimal Condition Indicators:**
-- `is_ph_optimal`: pH in optimal range (5.5-6.5)
-- `is_tds_optimal`: TDS in optimal range (800-1200)
-- `is_temp_optimal`: Temperature in optimal range (20-28°C)
-- `is_humidity_optimal`: Humidity in optimal range (40-70%)
-
-**Lag Features:**
-- `ph_lag_1`: Previous pH value
-- `tds_lag_1`: Previous TDS value
-- `temp_lag_1`: Previous temperature value
-- `humidity_lag_1`: Previous humidity value
-
-**Rolling Statistics (1 hour):**
-- `ph_avg_1h`, `ph_max_1h`, `ph_min_1h`
-- `tds_avg_1h`, `tds_max_1h`, `tds_min_1h`
-- `temp_avg_1h`, `temp_max_1h`, `temp_min_1h`
-- `humidity_avg_1h`, `humidity_max_1h`, `humidity_min_1h`
-- `water_temp_avg_1h`
-
-**Rolling Statistics (6 hours):**
-- `ph_avg_6h`, `tds_avg_6h`, `temp_avg_6h`, `humidity_avg_6h`, `water_temp_avg_6h`
-
-### Usage
-
-**Create Feature Store:**
-```python
-from ml.feature_store import create_feature_store
-
-# Create feature store from Gold layer
-feature_table = create_feature_store(
-    catalog="hydroponics",
-    gold_table_name="hydroponics.gold.iot_data",
-    feature_table_name="sensor_features"
-)
-```
-
-**Setup and Access:**
-
-The Feature Store is automatically created when you run the ML training job or manually via the `create_feature_store()` function. Once created, the feature table is stored in the Databricks Feature Store under the specified catalog and database (default: `{catalog}.feature_store.sensor_features`).
-
-**How it works:**
-- The Feature Store reads from the Gold layer fact table (`{catalog}.gold.iot_data`)
-- It creates a new database called `feature_store` in your Unity Catalog
-- The feature table `sensor_features` contains all engineered features with `reading_id` as the primary key
-- Features are automatically computed including lag features, rolling statistics, and optimal condition indicators
-- The table is accessible via Databricks Feature Store APIs for both training and inference
-
-**Accessing Features:**
-- Training scripts automatically read from the Feature Store using `FeatureStoreManager`
-- Inference scripts load features on-demand from the Feature Store
-- Features are versioned and managed by Databricks Feature Store, ensuring consistency across training and inference
-- The Feature Store handles feature lookups efficiently, making it ideal for real-time predictions
-
-**Note:** The Feature Store must be created before training any models. This is typically done automatically by the ML training job, which runs the `create_feature_store` task first. See the [Setup](#setup) section for detailed setup instructions.
 
 ## Models
 
@@ -383,20 +183,6 @@ The Feature Store is automatically created when you run the ML training job or m
 - `dropout`: Dropout rate (default: 0.2)
 - `forecast_horizon`: Steps ahead to predict (default: 1)
 
-**Example:**
-```python
-from ml.models.lstm_model import create_lstm_model
-
-model, optimizer, criterion = create_lstm_model(
-    input_size=20,      # Number of features
-    hidden_size=64,
-    num_layers=2,
-    output_size=1,      # Predict single value
-    dropout=0.2,
-    learning_rate=0.001
-)
-```
-
 ### 2. GRU (Gated Recurrent Unit)
 
 **Purpose**: Lighter alternative to LSTM for time-series forecasting
@@ -419,20 +205,6 @@ model, optimizer, criterion = create_lstm_model(
 **Key Parameters:**
 - Same as LSTM (sequence_length, hidden_size, num_layers, dropout)
 
-**Example:**
-```python
-from ml.models.gru_model import create_gru_model
-
-model, optimizer, criterion = create_gru_model(
-    input_size=20,
-    hidden_size=64,
-    num_layers=2,
-    output_size=1,
-    dropout=0.2,
-    learning_rate=0.001
-)
-```
-
 ### 3. LightGBM
 
 **Purpose**: Tabular classification and regression
@@ -454,18 +226,6 @@ model, optimizer, criterion = create_gru_model(
 - `learning_rate`: Learning rate (default: 0.05)
 - `num_boost_round`: Number of boosting rounds (default: 100)
 
-**Example:**
-```python
-from ml.models.lightgbm_model import create_lightgbm_model
-
-params, n_rounds = create_lightgbm_model(
-    task_type="classification",
-    num_leaves=31,
-    learning_rate=0.05,
-    num_boost_round=100
-)
-```
-
 ## MLflow Integration
 
 ### Experiment Tracking
@@ -484,173 +244,12 @@ All training runs are automatically logged to MLflow with:
 - Each training run creates a new model version
 - Models are tagged with metadata
 
-**Model Stages:**
-- **None**: Newly registered model
-- **Staging**: Candidate for production (testing phase)
-- **Production**: Active production model
-- **Archived**: Deprecated models
-
-### Accessing Models
-
-**Load from Registry:**
-```python
-from ml.utils.mlflow_utils import load_model_from_registry
-
-# Load production model
-model = load_model_from_registry("hydroponics_lstm_forecast", stage="Production")
-
-# Load staging model
-model = load_model_from_registry("hydroponics_lstm_forecast", stage="Staging")
-```
-
-**Promote Models:**
-```python
-from ml.utils.mlflow_utils import transition_model_stage
-
-# Promote to production
-transition_model_stage("hydroponics_lstm_forecast", version=2, stage="Production")
-
-# Archive old model
-transition_model_stage("hydroponics_lstm_forecast", version=1, stage="Archived")
-```
-
-**Get Latest Version:**
-```python
-from ml.utils.mlflow_utils import get_latest_model_version
-
-version = get_latest_model_version("hydroponics_lstm_forecast")
-```
-
 ### MLflow UI
 
 Access MLflow UI in Databricks:
 1. Go to **Experiments** in the left sidebar
 2. Select your experiment (e.g., `hydroponics_lstm`)
 3. View runs, compare metrics, and manage models
-
-## Training Models
-
-### Prerequisites
-
-1. **Gold Layer Data**: Ensure Gold layer has been processed
-2. **Feature Store**: Create feature store from Gold layer
-3. **MLflow**: Available in Databricks (pre-installed)
-
-### Training Workflow
-
-#### Option 1: Using Databricks Job
-
-**1. Create ML Training Job:**
-
-Use the provided job configuration (`jobs/ml_training.json`):
-
-```bash
-# Create job from JSON
-databricks jobs create --json-file jobs/ml_training.json
-```
-
-**2. Run Training Job:**
-
-```bash
-databricks jobs run-now <job-id> --json '{
-  "job_parameters": {
-    "DATABRICKS_CATALOG": "hydroponics",
-    "S3_BUCKET": "hydroponics-data"
-  }
-}'
-```
-
-The job will:
-1. Create feature store from Gold layer
-2. Train LSTM model
-3. Train GRU model
-4. Train LightGBM model
-
-#### Option 2: Manual Training
-
-**1. Create Feature Store:**
-
-```python
-from ml.feature_store import create_feature_store
-
-create_feature_store(
-    catalog="hydroponics",
-    gold_table_name="hydroponics.gold.iot_data",
-    feature_table_name="sensor_features"
-)
-```
-
-**2. Train LSTM:**
-
-```python
-from ml.training.train_lstm import train_lstm
-
-train_lstm(
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    sequence_length=24,
-    forecast_horizon=1,
-    hidden_size=64,
-    num_layers=2,
-    dropout=0.2,
-    learning_rate=0.001,
-    batch_size=32,
-    epochs=50,
-    experiment_name="hydroponics_lstm",
-    registered_model_name="hydroponics_lstm_forecast"
-)
-```
-
-**3. Train GRU:**
-
-```python
-from ml.training.train_gru import train_gru
-
-train_gru(
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    sequence_length=24,
-    forecast_horizon=1,
-    hidden_size=64,
-    num_layers=2,
-    dropout=0.2,
-    learning_rate=0.001,
-    batch_size=32,
-    epochs=50,
-    experiment_name="hydroponics_gru",
-    registered_model_name="hydroponics_gru_forecast"
-)
-```
-
-**4. Train LightGBM:**
-
-```python
-from ml.training.train_lightgbm import train_lightgbm
-
-# Classification
-train_lightgbm(
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="is_ph_optimal",
-    task_type="classification",
-    num_leaves=31,
-    learning_rate=0.05,
-    num_boost_round=100,
-    experiment_name="hydroponics_lightgbm",
-    registered_model_name="hydroponics_lightgbm_classifier"
-)
-
-# Regression
-train_lightgbm(
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    task_type="regression",
-    num_leaves=31,
-    learning_rate=0.05,
-    num_boost_round=100,
-    experiment_name="hydroponics_lightgbm",
-    registered_model_name="hydroponics_lightgbm_regressor"
-)
-```
 
 ### Training Parameters
 
@@ -674,84 +273,31 @@ train_lightgbm(
 
 ## Model Inference
 
-### Using LSTM/GRU
+### Batch Inference
 
-**Load and Predict:**
+The `batch_inference.py` script loads the latest versions of all models (LSTM, GRU, LightGBM) and performs batch predictions on the entire feature table, writing results to a Delta table.
 
-```python
-from ml.inference.predict import predict_with_lstm_gru
+The `ml_inference.json` job configuration runs batch inference using `batch_inference.py`:
 
-predictions = predict_with_lstm_gru(
-    model_name="hydroponics_lstm_forecast",
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    sequence_length=24,
-    model_stage="Production",
-    num_predictions=10
-)
-```
+- **Parameters:**
+1. `DATABRICKS_CATALOG` - Unity Catalog name (e.g., `hydroponics`)
+2. `S3_BUCKET` - S3 bucket name (e.g., `hydroponics-data`)
+3. `FEATURE_TABLE_NAME` - Feature table name (e.g., `feature_store.sensor_features`)
+4. `LSTM_MODEL_NAME` - LSTM model name in registry
+5. `GRU_MODEL_NAME` - GRU model name in registry
+6. `LIGHTGBM_MODEL_NAME` - LightGBM model name in registry
+7. `OUTPUT_TABLE_NAME` - Output table for predictions (e.g., `hydroponics.predictions.batch_predictions`)
+8. `SEQUENCE_LENGTH` (optional) - Sequence length for LSTM/GRU (default: 24)
+9. `TARGET_COL` (optional) - Target column name (default: `ph_level`)
 
-**Multi-step Forecasting:**
-
-```python
-# Predict 10 steps ahead
-predictions = predict_with_lstm_gru(
-    model_name="hydroponics_lstm_forecast",
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    sequence_length=24,
-    model_stage="Production",
-    num_predictions=10  # Forecast 10 steps ahead
-)
-```
-
-### Using LightGBM
-
-**Classification:**
-
-```python
-from ml.inference.predict import predict_with_lightgbm
-
-predictions = predict_with_lightgbm(
-    model_name="hydroponics_lightgbm_classifier",
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="is_ph_optimal",
-    model_stage="Production",
-    num_predictions=10
-)
-```
-
-**Regression:**
-
-```python
-predictions = predict_with_lightgbm(
-    model_name="hydroponics_lightgbm_regressor",
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    model_stage="Production",
-    num_predictions=10
-)
-```
-
-### Direct Model Loading
-
-**Load PyTorch Model:**
-
-```python
-import mlflow.pytorch
-
-model_uri = "models:/hydroponics_lstm_forecast/Production"
-model = mlflow.pytorch.load_model(model_uri)
-```
-
-**Load LightGBM Model:**
-
-```python
-import mlflow.lightgbm
-
-model_uri = "models:/hydroponics_lightgbm_classifier/Production"
-model = mlflow.lightgbm.load_model(model_uri)
-```
+**Output:**
+The script writes predictions to the specified Delta table with the following columns:
+- All original feature columns
+- `lstm_prediction` - LSTM model predictions
+- `gru_prediction` - GRU model predictions
+- `lightgbm_prediction` - LightGBM model predictions
+- `ensemble_avg` - Average of all three model predictions
+- `inference_timestamp` - Timestamp when inference was run
 
 ## Model Versioning
 
@@ -768,66 +314,6 @@ model = mlflow.lightgbm.load_model(model_uri)
 - Hyperparameters
 - Evaluation metrics
 - Model artifacts (weights, scalers, configs)
-
-### Staging Workflow
-
-**1. Train Model:**
-```python
-train_lstm(
-    feature_table_name="...",
-    registered_model_name="hydroponics_lstm_forecast"
-)
-# Creates version 1 in "None" stage
-```
-
-**2. Promote to Staging:**
-```python
-from ml.utils.mlflow_utils import transition_model_stage
-
-transition_model_stage("hydroponics_lstm_forecast", version=1, stage="Staging")
-```
-
-**3. Test Staging Model:**
-```python
-# Load and test staging model
-model = load_model_from_registry("hydroponics_lstm_forecast", stage="Staging")
-# Run validation tests...
-```
-
-**4. Promote to Production:**
-```python
-# Archive current production model
-transition_model_stage("hydroponics_lstm_forecast", version=1, stage="Archived")
-
-# Promote new model to production
-transition_model_stage("hydroponics_lstm_forecast", version=2, stage="Production")
-```
-
-### Reproducibility
-
-**Model Artifacts Include:**
-- Model weights/parameters
-- Preprocessing scalers
-- Training configuration
-- Feature engineering logic
-- Evaluation metrics
-
-**Reproduce Training:**
-```python
-# Load model and training config from MLflow
-import mlflow
-
-run = mlflow.get_run(run_id="...")
-params = run.data.params
-metrics = run.data.metrics
-
-# Recreate model with same parameters
-model = create_lstm_model(
-    input_size=int(params["input_size"]),
-    hidden_size=int(params["hidden_size"]),
-    # ... other parameters
-)
-```
 
 ## Project Structure
 
@@ -847,206 +333,12 @@ src/ml/
 │   └── train_lightgbm.py         # LightGBM training script
 ├── inference/
 │   ├── __init__.py
-│   └── predict.py                # Model inference script
+│   └── batch_inference.py         # Batch inference script (loads latest models, writes to Delta table)
 └── utils/
     ├── __init__.py
     ├── mlflow_utils.py           # MLflow helper functions
     └── data_preprocessing.py     # Data preprocessing utilities
 ```
-
-## Dependencies
-
-### Pre-installed in Databricks
-
-The following packages are pre-installed in Databricks runtime:
-
-- **PyTorch**: For LSTM and GRU models
-- **LightGBM**: For gradient boosting
-- **MLflow**: For experiment tracking and model registry
-- **scikit-learn**: For preprocessing and metrics
-- **pandas**: For data manipulation
-- **numpy**: For numerical operations
-- **databricks.feature_store**: For Feature Store
-
-### Local Development
-
-For local development and testing, install:
-
-```bash
-pip install -r requirements.txt
-```
-
-**requirements.txt includes:**
-- `torch>=2.0.0`: PyTorch for neural networks
-- `lightgbm>=4.0.0`: LightGBM for tabular models
-- `scikit-learn>=1.3.0`: Preprocessing and metrics
-- `pandas>=2.0.0`: Data manipulation
-- `numpy>=1.24.0`: Numerical operations
-
-**Note**: MLflow and Databricks Feature Store are only available in Databricks environment.
-
-## Examples
-
-### Example 1: Complete Training Pipeline
-
-```python
-# 1. Create feature store
-from ml.feature_store import create_feature_store
-
-feature_table = create_feature_store(
-    catalog="hydroponics",
-    gold_table_name="hydroponics.gold.iot_data",
-    feature_table_name="sensor_features"
-)
-
-# 2. Train LSTM
-from ml.training.train_lstm import train_lstm
-
-model_lstm, scaler_X, scaler_y = train_lstm(
-    feature_table_name=feature_table,
-    target_col="ph_level",
-    sequence_length=24,
-    epochs=50
-)
-
-# 3. Train LightGBM
-from ml.training.train_lightgbm import train_lightgbm
-
-model_lgbm = train_lightgbm(
-    feature_table_name=feature_table,
-    target_col="is_ph_optimal",
-    task_type="classification"
-)
-```
-
-### Example 2: Model Inference Pipeline
-
-```python
-# 1. Load production model
-from ml.utils.mlflow_utils import load_model_from_registry
-
-model = load_model_from_registry("hydroponics_lstm_forecast", stage="Production")
-
-# 2. Get latest features
-from ml.feature_store import FeatureStoreManager
-
-fs_manager = FeatureStoreManager("hydroponics")
-df_features = fs_manager.get_feature_table("sensor_features")
-
-# 3. Make predictions
-from ml.inference.predict import predict_with_lstm_gru
-
-predictions = predict_with_lstm_gru(
-    model_name="hydroponics_lstm_forecast",
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="ph_level",
-    model_stage="Production",
-    num_predictions=10
-)
-```
-
-### Example 3: Model Promotion Workflow
-
-```python
-from ml.utils.mlflow_utils import (
-    get_latest_model_version,
-    transition_model_stage,
-    load_model_from_registry
-)
-
-# 1. Get latest model version
-latest_version = get_latest_model_version("hydroponics_lstm_forecast")
-
-# 2. Test staging model
-staging_model = load_model_from_registry("hydroponics_lstm_forecast", stage="Staging")
-# ... run validation ...
-
-# 3. Archive old production model
-transition_model_stage("hydroponics_lstm_forecast", version=latest_version-1, stage="Archived")
-
-# 4. Promote new model to production
-transition_model_stage("hydroponics_lstm_forecast", version=latest_version, stage="Production")
-```
-
-### Example 4: Custom Training Configuration
-
-```python
-from ml.training.train_lstm import train_lstm
-
-# Custom configuration for different target
-train_lstm(
-    feature_table_name="hydroponics.feature_store.sensor_features",
-    target_col="tds_level",  # Predict TDS instead of pH
-    sequence_length=48,       # Longer sequence
-    forecast_horizon=3,      # Predict 3 steps ahead
-    hidden_size=128,         # Larger model
-    num_layers=3,            # Deeper network
-    dropout=0.3,             # More regularization
-    learning_rate=0.0005,    # Lower learning rate
-    batch_size=64,           # Larger batches
-    epochs=100,              # More epochs
-    experiment_name="hydroponics_lstm_tds",
-    registered_model_name="hydroponics_lstm_tds_forecast"
-)
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**1. Feature Store Not Found:**
-```
-Error: Feature table not found
-```
-**Solution**: Create feature store first using `create_feature_store()`
-
-**2. Model Not in Registry:**
-```
-Error: Model not found in registry
-```
-**Solution**: Train the model first, or check the model name and stage
-
-**3. CUDA Out of Memory:**
-```
-RuntimeError: CUDA out of memory
-```
-**Solution**: Reduce batch size or use CPU:
-```python
-device = torch.device("cpu")  # Force CPU
-```
-
-**4. Sequence Length Mismatch:**
-```
-Error: Input sequence length doesn't match model
-```
-**Solution**: Use the same `sequence_length` used during training
-
-**5. Feature Mismatch:**
-```
-Error: Number of features doesn't match
-```
-**Solution**: Ensure feature store is up-to-date and matches training features
-
-## Best Practices
-
-1. **Feature Store Updates**: Update feature store regularly as new data arrives
-2. **Model Monitoring**: Monitor model performance in production
-3. **Version Control**: Keep track of model versions and their performance
-4. **Staging Workflow**: Always test models in Staging before Production
-5. **Reproducibility**: Log all hyperparameters and configurations
-6. **Resource Management**: 
-   - Serverless compute is recommended for simplicity (automatic resource management)
-   - For faster LSTM/GRU training, use GPU clusters if available
-   - Monitor training times and adjust batch sizes/epochs accordingly
-7. **Data Quality**: Ensure Gold layer data quality before feature engineering
-
-## Support
-
-For issues or questions:
-1. Check MLflow UI for experiment details
-2. Review model registry for version history
-3. Check Databricks job logs for training errors
-4. Verify feature store is up-to-date
 
 ## Related Documentation
 

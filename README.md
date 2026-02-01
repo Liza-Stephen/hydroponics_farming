@@ -50,7 +50,7 @@ hydroponics_farming/
 │       │   ├── train_gru.py        # GRU training script
 │       │   └── train_lightgbm.py   # LightGBM training script
 │       ├── inference/
-│       │   └── predict.py          # Model inference script
+│       │   └── batch_inference.py   # Batch inference script
 │       └── utils/
 │           ├── mlflow_utils.py     # MLflow helper functions
 │           └── data_preprocessing.py # Data preprocessing utilities

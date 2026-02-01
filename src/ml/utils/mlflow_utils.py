@@ -256,48 +256,38 @@ def get_latest_model_version(model_name):
     """Get latest model version from MLflow model registry"""
     client = MlflowClient()
     try:
-        latest_version = client.get_latest_versions(model_name, stages=["None", "Staging", "Production"])
-        if latest_version:
-            return latest_version[0].version
+        # Get all versions and return the latest one
+        versions = client.search_model_versions(f"name='{model_name}'")
+        if versions:
+            # Sort by version number (descending) and return the latest
+            latest = max(versions, key=lambda v: int(v.version))
+            return latest.version
         return None
     except Exception as e:
         print(f"Error getting latest model version: {e}")
         return None
 
 
-def transition_model_stage(model_name, version, stage):
-    """
-    Transition model to a new stage (Staging, Production, Archived)
-    
-    Args:
-        model_name: Name of the model in registry
-        version: Model version
-        stage: Target stage (Staging, Production, Archived)
-    """
-    client = MlflowClient()
-    try:
-        client.transition_model_version_stage(
-            name=model_name,
-            version=version,
-            stage=stage
-        )
-        print(f"Transitioned {model_name} v{version} to {stage}")
-    except Exception as e:
-        print(f"Error transitioning model: {e}")
-
-
-def load_model_from_registry(model_name, stage="Production"):
+def load_model_from_registry(model_name, version=None):
     """
     Load model from MLflow model registry
     
     Args:
         model_name: Name of the model
-        stage: Model stage (Production, Staging, etc.)
+        version: Model version number (None = latest version)
     
     Returns:
         Loaded model
     """
-    model_uri = f"models:/{model_name}/{stage}"
+    if version is None:
+        # Get latest version
+        version = get_latest_model_version(model_name)
+        if version is None:
+            raise ValueError(f"No versions found for model {model_name}")
+        print(f"Loading latest version {version} of {model_name}")
+    
+    model_uri = f"models:/{model_name}/{version}"
+    
     try:
         # Try PyTorch first
         model = mlflow.pytorch.load_model(model_uri)
@@ -308,4 +298,4 @@ def load_model_from_registry(model_name, stage="Production"):
             model = mlflow.lightgbm.load_model(model_uri)
             return model
         except Exception as e:
-            raise ValueError(f"Could not load model {model_name} from registry: {e}")
+            raise ValueError(f"Could not load model {model_name} version {version} from registry: {e}")
