@@ -107,46 +107,7 @@ FROM gold.iot_data;
 - Data spanning multiple days/weeks for time-series models
 - Complete sensor readings (pH, TDS, temperature, humidity)
 
-### Step 2: Configure ML Training Job
-
-The ML training job is defined in `jobs/ml_training.json`. You need to:
-
-1. **Update Repo Paths**:
-   - Open `jobs/ml_training.json`
-   - Replace `/Repos/lizabinispam@gmail.com/hydroponics_farming/` with your actual repo path
-   - Find your repo path: In Databricks, go to Repos → Your repo → Copy the path
-
-2. **Verify Job Parameters**:
-   The job expects these parameters (with defaults):
-   ```json
-   {
-     "DATABRICKS_CATALOG": "hydroponics",
-     "S3_BUCKET": "hydroponics-data"
-   }
-   ```
-
-### Step 3: Create Databricks Job
-
-**Option A: Using Databricks UI**
-
-1. Go to **Workflows** → **Jobs** → **Create Job**
-2. Click **JSON Editor** tab
-3. Copy and paste the contents of `jobs/ml_training.json`
-4. **Important**: Update all repo paths in the JSON:
-   - Search for `/Repos/lizabinispam@gmail.com/hydroponics_farming/`
-   - Replace with your actual repo path
-5. Click **Create**
-
-**Option B: Using Databricks CLI**
-
-```bash
-# Create job from JSON file
-databricks jobs create --json-file jobs/ml_training.json
-
-# Note: Update repo paths in the JSON file first
-```
-
-**Option C: Manual Configuration**
+### Step 2: Create ML Training Job
 
 1. Go to **Workflows** → **Jobs** → **Create Job**
 2. Configure each task manually:
@@ -170,7 +131,7 @@ databricks jobs create --json-file jobs/ml_training.json
      - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `is_ph_optimal`, `classification`
      - Cluster: CPU cluster is sufficient
 
-### Step 4: Run ML Training Job
+### Step 3: Run ML Training Job
 
 **First Run (Create Feature Store and Train Models):**
 
@@ -206,7 +167,7 @@ databricks jobs run-now <job-id> --json '{
    - Each model trains independently
    - Models are registered in MLflow automatically
 
-### Step 5: Verify Setup
+### Step 4: Verify Setup
 
 **1. Check Feature Store:**
 ```sql
@@ -237,7 +198,7 @@ DESCRIBE TABLE feature_store.sensor_features;
 - Check that all tasks completed successfully
 - Review logs for any warnings or errors
 
-### Step 6: Update Feature Store (Ongoing)
+### Step 5: Update Feature Store (Ongoing)
 
 After the initial setup, update the Feature Store when new data arrives:
 
@@ -268,7 +229,7 @@ create_feature_store(
 )
 ```
 
-### Step 7: Configure Model Retraining (Optional)
+### Step 6: Configure Model Retraining (Optional)
 
 **Schedule Regular Retraining:**
 1. Go to your ML training job
