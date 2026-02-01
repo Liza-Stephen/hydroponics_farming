@@ -40,6 +40,10 @@ def train_lightgbm(
         experiment_name: MLflow experiment name
         registered_model_name: Model registry name
     """
+    print("="*60)
+    print("TRAINING LightGBM MODEL")
+    print("="*60)
+
     # Setup Spark and Feature Store
     spark, config = get_spark_session()
     fs_manager = FeatureStoreManager(config.catalog)
