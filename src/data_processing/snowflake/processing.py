@@ -20,7 +20,7 @@ def create_snowflake_connection(config):
     conn_params = config.get_connection_params()
     
     conn = snowflake.connector.connect(**conn_params)
-    print(f"✓ Connected to Snowflake: {config.database}.{config.schema}")
+    print(f"Connected to Snowflake: {config.database}.{config.schema}")
     return conn
 
 
@@ -32,19 +32,19 @@ def create_snowflake_schema(conn, config):
         # Try to create database if not exists
         try:
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config.database}")
-            print(f"✓ Database {config.database} ready")
+            print(f"Database {config.database} ready")
         except snowflake.connector.errors.ProgrammingError as e:
             # Database might already exist - check if we can use it
             if "already exists" in str(e).lower():
-                print(f"⚠️  Database {config.database} already exists. Attempting to use it...")
+                print(f"Database {config.database} already exists. Attempting to use it...")
                 # Try to use the database - this will fail if no privileges
                 try:
                     cursor.execute(f"USE DATABASE {config.database}")
-                    print(f"✓ Database {config.database} is accessible")
+                    print(f"Database {config.database} is accessible")
                 except snowflake.connector.errors.ProgrammingError as use_error:
                     error_msg = str(use_error)
                     if "no privileges" in error_msg.lower() or "privileges" in error_msg.lower():
-                        print(f"\n✗ ERROR: Database {config.database} exists but current role has no privileges on it.")
+                        print(f"\nERROR: Database {config.database} exists but current role has no privileges on it.")
                         print(f"\nTo fix this, run the following SQL in Snowflake as ACCOUNTADMIN:")
                         print(f"  GRANT USAGE ON DATABASE {config.database} TO ROLE PUBLIC;")
                         print(f"  GRANT CREATE SCHEMA ON DATABASE {config.database} TO ROLE PUBLIC;")
@@ -64,12 +64,12 @@ def create_snowflake_schema(conn, config):
         # Create schema if not exists (database is already in use)
         try:
             cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {config.schema}")
-            print(f"✓ Schema {config.schema} ready")
+            print(f"Schema {config.schema} ready")
         except snowflake.connector.errors.ProgrammingError as e:
             if "already exists" in str(e).lower():
-                print(f"✓ Schema {config.schema} already exists")
+                print(f"Schema {config.schema} already exists")
             elif "no privileges" in str(e).lower() or "privileges" in str(e).lower():
-                print(f"\n✗ ERROR: Cannot create schema. Current role has no privileges.")
+                print(f"\nERROR: Cannot create schema. Current role has no privileges.")
                 print(f"\nTo fix this, run the following SQL in Snowflake as ACCOUNTADMIN:")
                 print(f"  GRANT CREATE SCHEMA ON DATABASE {config.database} TO ROLE PUBLIC;")
                 raise
@@ -288,7 +288,7 @@ def load_gold_to_snowflake(spark, config):
     fact_table = config.get_snowflake_table_name("iot_data")
     load_fact_table(spark, config, "iot_data", fact_table)
     
-    print("\n✓ All Gold layer tables loaded to Snowflake!")
+    print("\nAll Gold layer tables loaded to Snowflake!")
     
     return {
         "dim_time": dim_time_table,
@@ -312,7 +312,7 @@ def run_snowflake_processing():
         for table_name, full_table_name in tables.items():
             cursor.execute(f"SELECT COUNT(*) FROM {full_table_name}")
             count = cursor.fetchone()[0]
-            print(f"\n✓ {table_name}: {count} records in Snowflake")
+            print(f"\n{table_name}: {count} records in Snowflake")
     finally:
         cursor.close()
         conn.close()

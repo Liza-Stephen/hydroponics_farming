@@ -1,0 +1,125 @@
+{
+  "name": "ml_training",
+  "email_notifications": {
+    "no_alert_for_skipped_runs": false
+  },
+  "webhook_notifications": {},
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "create_feature_store",
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/feature_store.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "gold.iot_data",
+          "sensor_features"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default"
+    },
+    {
+      "task_key": "train_gru",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_gru.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "feature_store.sensor_features",
+          "ph_level"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "torch_env"
+    },
+    {
+      "task_key": "train_lightgbm",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_lightgbm.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "feature_store.sensor_features",
+          "is_env_optimal"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "gbm_env"
+    },
+    {
+      "task_key": "train_lstm",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_lstm.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "feature_store.sensor_features",
+          "ph_level"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "torch_env"
+    }
+  ],
+  "queue": {
+    "enabled": true
+  },
+  "environments": [
+    {
+      "environment_key": "Default",
+      "spec": {
+        "environment_version": "4"
+      }
+    },
+    {
+      "environment_key": "gbm_env",
+      "spec": {
+        "dependencies": [
+          "lightgbm>=4.0.0",
+          "torch"
+        ],
+        "environment_version": "4"
+      }
+    },
+    {
+      "environment_key": "torch_env",
+      "spec": {
+        "dependencies": [
+          "torch"
+        ],
+        "environment_version": "4"
+      }
+    }
+  ],
+  "performance_target": "PERFORMANCE_OPTIMIZED"
+}

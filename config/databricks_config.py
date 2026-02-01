@@ -59,6 +59,6 @@ def get_spark_session():
         .getOrCreate()
     
     spark.sql(f"USE CATALOG {config.catalog}")
-    print(f"✓ Using catalog: {config.catalog}")
+    print(f"Using catalog: {config.catalog}")
     
     return spark, config

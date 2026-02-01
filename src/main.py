@@ -24,7 +24,7 @@ def run_full_pipeline(source_csv_path=None):
     print("\nSnowflake Layer...")
     run_snowflake_processing()
     
-    print("\n✓ Pipeline completed!")
+    print("\nPipeline completed!")
 
 
 if __name__ == "__main__":

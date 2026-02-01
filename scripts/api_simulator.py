@@ -111,7 +111,7 @@ def simulate_api_ingestion(
                         success = send_sensor_data(api_url, batch[0])
                         if success:
                             success_count += 1
-                            print(f"✓ Sent record {sent_count + 1}: id={batch[0].get('id', 'N/A')}")
+                            print(f"Sent record {sent_count + 1}: id={batch[0].get('id', 'N/A')}")
                         else:
                             error_count += 1
                     else:
@@ -119,7 +119,7 @@ def simulate_api_ingestion(
                         success = send_sensor_data(api_url, {"records": batch})
                         if success:
                             success_count += len(batch)
-                            print(f"✓ Sent batch: {len(batch)} records (total: {sent_count + len(batch)})")
+                            print(f"Sent batch: {len(batch)} records (total: {sent_count + len(batch)})")
                         else:
                             error_count += len(batch)
                     

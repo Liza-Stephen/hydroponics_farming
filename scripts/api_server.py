@@ -228,7 +228,7 @@ def main():
             # Test S3 connection
             s3_client.head_bucket(Bucket=s3_bucket)
             print(f"S3 bucket: s3://{s3_bucket}/{s3_prefix}")
-            print("✓ S3 connection successful")
+            print("S3 connection successful")
         except NoCredentialsError:
             print("Error: AWS credentials not found. Configure with 'aws configure' or set environment variables")
             return 1
