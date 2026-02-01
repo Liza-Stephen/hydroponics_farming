@@ -69,10 +69,31 @@ def train_gru(
     if target_col not in numeric_cols:
         raise ValueError(f"Target column {target_col} not found in features")
     
+    # Handle missing values before creating sequences
+    print("Checking for missing values...")
+    df_features = df_pandas[numeric_cols].copy()
+    missing_counts = df_features.isnull().sum()
+    if missing_counts.sum() > 0:
+        print(f"Found missing values in columns: {missing_counts[missing_counts > 0].to_dict()}")
+        # Forward fill, then backward fill, then fill with median
+        df_features = df_features.ffill().bfill()
+        # If still NaN, fill with median
+        for col in df_features.columns:
+            if df_features[col].isnull().sum() > 0:
+                median_val = df_features[col].median()
+                df_features[col] = df_features[col].fillna(median_val if not np.isnan(median_val) else 0)
+        print("Filled missing values using forward fill, backward fill, and median")
+    
+    # Verify no NaN values remain
+    if df_features.isnull().sum().sum() > 0:
+        print(f"Warning: Still have {df_features.isnull().sum().sum()} NaN values after filling")
+        # Last resort: fill with 0
+        df_features = df_features.fillna(0)
+    
     # Create sequences
     print(f"Creating sequences (length={sequence_length}, horizon={forecast_horizon})...")
     X, y = create_sequences(
-        df_pandas[numeric_cols],
+        df_features,
         sequence_length=sequence_length,
         target_col=target_col,
         forecast_horizon=forecast_horizon
@@ -156,7 +177,17 @@ def train_gru(
             optimizer.zero_grad()
             outputs = model(batch_X)
             loss = criterion(outputs, batch_y)
+            
+            # Check for NaN loss
+            if torch.isnan(loss):
+                print(f"Warning: NaN loss detected at epoch {epoch + 1}, batch {i // batch_size + 1}")
+                continue
+            
             loss.backward()
+            
+            # Gradient clipping to prevent exploding gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             
             total_loss += loss.item()
@@ -195,8 +226,19 @@ def train_gru(
     with torch.no_grad():
         y_pred_scaled = model(X_test_tensor).cpu().numpy()
     
+    # Handle potential NaN in predictions
+    if np.isnan(y_pred_scaled).any():
+        print(f"Warning: Found {np.isnan(y_pred_scaled).sum()} NaN values in final predictions, replacing with 0")
+        y_pred_scaled = np.nan_to_num(y_pred_scaled, nan=0.0)
+    
     y_pred = scaler_y.inverse_transform(y_pred_scaled)
     y_true = scaler_y.inverse_transform(y_test_scaled)
+    
+    # Ensure no NaN after inverse transform
+    if np.isnan(y_pred).any() or np.isnan(y_true).any():
+        print(f"Warning: Found NaN after inverse transform - y_pred: {np.isnan(y_pred).sum()}, y_true: {np.isnan(y_true).sum()}")
+        y_pred = np.nan_to_num(y_pred, nan=0.0)
+        y_true = np.nan_to_num(y_true, nan=0.0)
     
     final_metrics = calculate_time_series_metrics(y_true.flatten(), y_pred.flatten())
     log_model_metrics(final_metrics, step=epochs)
