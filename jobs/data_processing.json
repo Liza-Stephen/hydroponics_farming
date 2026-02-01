@@ -18,7 +18,8 @@
       "run_job_task": {
         "job_id": 451773301346270,
         "job_parameters": {
-          "data_catalog": "hydroponics"
+          "data_catalog": "hydroponics",
+          "s3_bucket": "hydroponics-data"
         }
       },
       "timeout_seconds": 0,
@@ -36,7 +37,8 @@
       "spark_python_task": {
         "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/silver/processing.py",
         "parameters": [
-          "hydroponics"
+          "hydroponics",
+          "hydroponics-data"
         ]
       },
       "timeout_seconds": 0,
@@ -55,7 +57,8 @@
       "spark_python_task": {
         "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/gold/processing.py",
         "parameters": [
-          "hydroponics"
+          "hydroponics",
+          "hydroponics-data"
         ]
       },
       "timeout_seconds": 0,
