@@ -231,13 +231,6 @@ def train_lightgbm(
     )
     print(f"Model logged: {model_uri}")
     
-    # Log feature importance
-    feature_importance = dict(zip(feature_names, model.feature_importance(importance_type='gain')))
-    top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]
-    print(f"\nTop 10 Features by Importance:")
-    for feature, importance in top_features:
-        print(f"  {feature}: {importance:.2f}")
-    
     return model
 
 
