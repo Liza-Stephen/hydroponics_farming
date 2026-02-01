@@ -129,6 +129,25 @@ def evaluate_classification_model(model, X_test, y_test):
         except:
             pass
     
+    # Warning for suspiciously perfect metrics (potential data leakage or overfitting)
+    perfect_threshold = 0.9999
+    if all(v >= perfect_threshold for k, v in metrics.items() if k != "roc_auc"):
+        print("\n" + "="*60)
+        print("WARNING: Suspiciously Perfect Metrics Detected!")
+        print("="*60)
+        print("All classification metrics are near-perfect (>= 0.9999).")
+        print("This may indicate:")
+        print("  1. Data leakage: Target or related features in training data")
+        print("  2. Overfitting: Model memorized training patterns")
+        print("  3. Test set issues: Too small or same as training set")
+        print("  4. Target directly derivable from features")
+        print("\nRecommendations:")
+        print("  - Check if target column or related columns are in feature set")
+        print("  - Verify train/test split is correct and independent")
+        print("  - Review feature importance for suspicious patterns")
+        print("  - Consider cross-validation to verify performance")
+        print("="*60 + "\n")
+    
     return metrics
 
 

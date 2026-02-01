@@ -57,6 +57,7 @@ def train_lightgbm(
     df_pandas = df_features.toPandas()
     
     # Create combined environment optimal indicator if target is "is_env_optimal"
+    exclude_from_features = []
     if target_col == "is_env_optimal":
         print("Creating combined environment optimal indicator...")
         optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
@@ -74,6 +75,10 @@ def train_lightgbm(
             (df_pandas["is_humidity_optimal"] == 1)
         ).astype(int)
         
+        # Exclude individual optimal columns from features to prevent data leakage
+        exclude_from_features = optimal_cols
+        print(f"Excluding optimal indicator columns from features to prevent data leakage: {exclude_from_features}")
+        
         print(f"Environment optimal distribution:")
         print(df_pandas["is_env_optimal"].value_counts())
         print(f"Optimal rate: {df_pandas['is_env_optimal'].mean():.2%}")
@@ -82,10 +87,12 @@ def train_lightgbm(
     if target_col not in df_pandas.columns:
         raise ValueError(f"Target column {target_col} not found in features")
     
-    # Prepare features
+    # Prepare features - exclude target and any columns used to derive it
     print("Preparing features...")
+    exclude_cols = [target_col] + exclude_from_features
+    feature_cols = [col for col in df_pandas.columns if col not in exclude_cols]
     X_train, X_test, y_train, y_test, feature_names = prepare_tabular_features(
-        df_pandas, target_col=target_col, test_size=0.2, random_state=42
+        df_pandas, target_col=target_col, feature_cols=feature_cols, test_size=0.2, random_state=42
     )
     
     print(f"Training samples: {len(X_train)}, Test samples: {len(X_test)}")
@@ -142,6 +149,23 @@ def train_lightgbm(
         test_metrics = evaluate_classification_model(model, X_test.values, y_test.values)
     else:
         test_metrics = evaluate_regression_model(model, X_test.values, y_test.values)
+    
+    # Verify no data leakage (optimal columns should be excluded)
+    if target_col == "is_env_optimal":
+        optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
+        leakage_check = [col for col in optimal_cols if col in feature_names]
+        if leakage_check:
+            print("\n" + "!"*60)
+            print("WARNING: Potential Data Leakage Detected!")
+            print("!"*60)
+            print(f"The following optimal indicator columns are still in the feature set:")
+            for col in leakage_check:
+                print(f"  - {col}")
+            print("\nThese columns are used to create the target 'is_env_optimal'.")
+            print("They should have been excluded from features to prevent data leakage.")
+            print("!"*60 + "\n")
+        else:
+            print(f"\n✓ Data leakage check passed: Optimal indicator columns excluded from features.")
     
     # Log metrics
     log_model_metrics(test_metrics)
