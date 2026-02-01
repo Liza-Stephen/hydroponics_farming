@@ -2,6 +2,12 @@
 Model inference script - load models from MLflow registry and make predictions
 """
 import sys
+from pathlib import Path
+
+# Add src directory to Python path for imports
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # points to src/
+sys.path.append(str(PROJECT_ROOT))
+
 import numpy as np
 import pandas as pd
 import torch
