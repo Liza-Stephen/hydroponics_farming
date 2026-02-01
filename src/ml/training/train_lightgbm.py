@@ -40,26 +40,17 @@ def train_lightgbm(
         experiment_name: MLflow experiment name
         registered_model_name: Model registry name
     """
-    print("="*60)
-    print("TRAINING LIGHTGBM MODEL")
-    print("="*60)
-    
     # Setup Spark and Feature Store
     spark, config = get_spark_session()
     fs_manager = FeatureStoreManager(config.catalog)
     
     # Read features from Feature Store
-    print(f"Reading features from {feature_table_name}...")
     df_features = fs_manager.get_feature_table(feature_table_name.split(".")[-1])
-    
-    # Convert to Pandas
-    print("Converting to Pandas DataFrame...")
     df_pandas = df_features.toPandas()
     
     # Create combined environment optimal indicator if target is "is_env_optimal"
     exclude_from_features = []
     if target_col == "is_env_optimal":
-        print("Creating combined environment optimal indicator...")
         optimal_cols = ["is_ph_optimal", "is_tds_optimal", "is_temp_optimal", "is_humidity_optimal"]
         
         # Check all optimal columns exist
@@ -75,41 +66,21 @@ def train_lightgbm(
             (df_pandas["is_humidity_optimal"] == 1)
         ).astype(int)
         
-        # Exclude individual optimal columns from features to prevent data leakage
+        # Exclude individual optimal columns and raw sensor values from features to prevent data leakage
         exclude_from_features = optimal_cols
-        
-        # Also exclude raw sensor values that directly determine optimality
-        # These create data leakage because the model can learn the exact thresholds
         raw_sensor_cols = ["ph_level", "tds_level", "air_temperature", "air_humidity"]
         exclude_from_features.extend(raw_sensor_cols)
-        
-        print(f"Excluding optimal indicator columns from features to prevent data leakage:")
-        print(f"  - Optimal indicators: {optimal_cols}")
-        print(f"  - Raw sensor values (determine optimality): {raw_sensor_cols}")
-        
-        print(f"\nEnvironment optimal distribution:")
-        print(df_pandas["is_env_optimal"].value_counts())
-        print(f"Optimal rate: {df_pandas['is_env_optimal'].mean():.2%}")
-        
-        # Warn about extreme class imbalance
-        if df_pandas['is_env_optimal'].mean() < 0.01:
-            print(f"\n⚠️  WARNING: Extreme class imbalance detected ({df_pandas['is_env_optimal'].mean():.2%} positive)")
-            print("   Consider using class weights, different metrics, or a different target variable.")
     
     # Check target column exists
     if target_col not in df_pandas.columns:
         raise ValueError(f"Target column {target_col} not found in features")
     
     # Prepare features - exclude target and any columns used to derive it
-    print("Preparing features...")
     exclude_cols = [target_col] + exclude_from_features
     feature_cols = [col for col in df_pandas.columns if col not in exclude_cols]
     X_train, X_test, y_train, y_test, feature_names = prepare_tabular_features(
         df_pandas, target_col=target_col, feature_cols=feature_cols, test_size=0.2, random_state=42
     )
-    
-    print(f"Training samples: {len(X_train)}, Test samples: {len(X_test)}")
-    print(f"Features: {len(feature_names)}")
     
     # Create model parameters
     params, n_rounds = create_lightgbm_model(
@@ -153,15 +124,11 @@ def train_lightgbm(
         
         # Only use class weights if imbalance is significant
         pos_ratio = (y_train_fit.values == 1).mean() if len(classes) == 2 else None
-        if pos_ratio is not None and (pos_ratio < 0.1 or pos_ratio > 0.9):
-            print(f"\nUsing class weights to handle imbalance:")
-            print(f"  Class 0 weight: {class_weight[0]:.4f}")
-            print(f"  Class 1 weight: {class_weight[1]:.4f}")
-        else:
+        if pos_ratio is not None and not (pos_ratio < 0.1 or pos_ratio > 0.9):
             class_weight = None  # Don't use weights if balanced enough
     
     # Train model
-    print(f"\nTraining LightGBM model ({task_type})...")
+    print(f"Training LightGBM model ({task_type})...")
     model = train_lightgbm_model(
         X_train=X_train_fit.values,
         y_train=y_train_fit.values,
@@ -175,9 +142,8 @@ def train_lightgbm(
     )
     
     # Evaluate on test set
-    print("\nEvaluating on test set...")
     if task_type == "classification":
-        test_metrics = evaluate_classification_model(model, X_test.values, y_test.values, verbose=True)
+        test_metrics = evaluate_classification_model(model, X_test.values, y_test.values, verbose=False)
     else:
         test_metrics = evaluate_regression_model(model, X_test.values, y_test.values)
     
@@ -188,40 +154,15 @@ def train_lightgbm(
         
         leakage_check_optimal = [col for col in optimal_cols if col in feature_names]
         leakage_check_raw = [col for col in raw_sensor_cols if col in feature_names]
-        
-        if leakage_check_optimal or leakage_check_raw:
-            print("\n" + "!"*60)
-            print("WARNING: Potential Data Leakage Detected!")
-            print("!"*60)
-            if leakage_check_optimal:
-                print(f"The following optimal indicator columns are still in the feature set:")
-                for col in leakage_check_optimal:
-                    print(f"  - {col}")
-            if leakage_check_raw:
-                print(f"The following raw sensor values are still in the feature set:")
-                for col in leakage_check_raw:
-                    print(f"  - {col}")
-                print("\nThese raw values directly determine the optimal indicators via thresholds:")
-                print("  - ph_level (5.5-6.5) → is_ph_optimal")
-                print("  - tds_level (800-1200) → is_tds_optimal")
-                print("  - air_temperature (20-28) → is_temp_optimal")
-                print("  - air_humidity (40-70) → is_humidity_optimal")
-            print("\nThese should have been excluded from features to prevent data leakage.")
-            print("!"*60 + "\n")
-        else:
-            print(f"\n✓ Data leakage check passed:")
-            print(f"  - Optimal indicator columns excluded: {optimal_cols}")
-            print(f"  - Raw sensor values excluded: {raw_sensor_cols}")
     
     # Log metrics
     log_model_metrics(test_metrics)
     
-    print(f"\nTest Metrics:")
+    print("Test Metrics:")
     for metric, value in test_metrics.items():
         print(f"  {metric}: {value:.4f}")
     
     # Log model to MLflow
-    print(f"\nLogging model to MLflow...")
     input_example = X_test.head(1).values if len(X_test) > 0 else None
     model_uri = log_lightgbm_model(
         model,

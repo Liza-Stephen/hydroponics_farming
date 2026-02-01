@@ -158,33 +158,6 @@ def evaluate_classification_model(model, X_test, y_test, verbose=True):
         print(f"\nPredictions:")
         print(f"  Predicted 0: {(y_pred == 0).sum()} samples")
         print(f"  Predicted 1: {(y_pred == 1).sum()} samples")
-        
-        # Check if model is just predicting all negatives
-        if (y_pred == 0).all():
-            print(f"\n⚠️  WARNING: Model predicts all negatives!")
-            print("   This is likely due to extreme class imbalance.")
-            print("   Consider using class weights or different evaluation metrics.")
-    
-    # Warning for suspiciously perfect metrics (potential data leakage or overfitting)
-    perfect_threshold = 0.9999
-    if all(v >= perfect_threshold for k, v in metrics.items() if k != "roc_auc"):
-        print("\n" + "="*60)
-        print("WARNING: Suspiciously Perfect Metrics Detected!")
-        print("="*60)
-        print("All classification metrics are near-perfect (>= 0.9999).")
-        print("This may indicate:")
-        print("  1. Data leakage: Target or related features in training data")
-        print("  2. Overfitting: Model memorized training patterns")
-        print("  3. Test set issues: Too small or same as training set")
-        print("  4. Target directly derivable from features")
-        print("  5. Extreme class imbalance: Model predicts majority class")
-        print("\nRecommendations:")
-        print("  - Check if target column or related columns are in feature set")
-        print("  - Verify train/test split is correct and independent")
-        print("  - Review feature importance for suspicious patterns")
-        print("  - Consider cross-validation to verify performance")
-        print("  - For imbalanced data, use class weights or different metrics")
-        print("="*60 + "\n")
     
     return metrics
 
