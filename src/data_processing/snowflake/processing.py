@@ -133,8 +133,8 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
         # For large datasets, consider using COPY INTO or Snowflake's bulk loading
         if len(pandas_df) > 0:
             # Convert DataFrame to list of tuples, ensuring proper NULL handling
-            # Use fillna to replace all NaN/NaT with None first
-            pandas_df_clean = pandas_df.fillna(None)
+            # Use fillna with explicit value=None to replace all NaN/NaT with None
+            pandas_df_clean = pandas_df.fillna(value=None)
             
             # Convert to list of tuples - each row becomes a tuple
             values = [tuple(row) for row in pandas_df_clean.values]
@@ -212,8 +212,8 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
         # Batch insert (for large tables, consider using COPY INTO with S3 staging)
         if len(pandas_df) > 0:
             # Convert DataFrame to list of tuples, ensuring proper NULL handling
-            # Use fillna to replace all NaN/NaT with None first
-            pandas_df_clean = pandas_df.fillna(None)
+            # Use fillna with explicit value=None to replace all NaN/NaT with None
+            pandas_df_clean = pandas_df.fillna(value=None)
             
             # Convert to list of tuples - each row becomes a tuple
             values = [tuple(row) for row in pandas_df_clean.values]
