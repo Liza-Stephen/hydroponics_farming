@@ -6,9 +6,9 @@ A Databricks-based data processing pipeline implementing the medallion architect
 
 **Job Structure:**
 - **Single Job** with three dependent tasks:
-  - **Bronze Task**: Runs `bronze_ingestion.py` - raw data ingestion
-  - **Silver Task**: Runs `silver_processing.py` - data cleaning and validation (depends on Bronze)
-  - **Gold Task**: Runs `gold_processing.py` - fact and dimension tables (depends on Silver)
+  - **Bronze Task**: Runs `bronze/batch_ingestion.py` - raw data ingestion
+  - **Silver Task**: Runs `silver/processing.py` - data cleaning and validation (depends on Bronze)
+  - **Gold Task**: Runs `gold/processing.py` - fact and dimension tables (depends on Silver)
 
 **Execution:**
 - Code runs natively in Databricks via Jobs
@@ -24,10 +24,19 @@ hydroponics_farming/
 │   ├── databricks_config.py      # Databricks configuration
 ├── src/
 │   ├── data_processing/
-│   │   ├── bronze_ingestion.py   # Bronze layer ingestion
-│   │   ├── silver_processing.py  # Silver layer cleaning & validation
-│   │   └── gold_processing.py    # Gold layer fact & dimension tables
-│   └── main.py                   # Main orchestration script (optional)
+│   │   ├── bronze/
+│   │   │   ├── batch_ingestion.py          # Bronze layer batch ingestion
+│   │   │   └── api_ingestion.py             # Bronze layer API ingestion
+│   │   ├── silver/
+│   │   │   └── processing.py      # Silver layer cleaning & validation
+│   │   └── gold/
+│   │   │   └── processing.py      # Gold layer fact & dimension tables
+│   │   └── main.py                # Main orchestration script (optional)
+├── scripts/
+│   ├── split_data_by_date_ranges.py # Split CSV by date ranges (backfill/incremental/API)
+│   ├── batch_ingestion_example.py   # Example batch processing workflow
+│   ├── api_server.py                # API server for receiving sensor data
+│   └── api_simulator.py             # Simulate API-based data ingestion
 ├── jobs/
 │   └── data_processing.json       # Main job configuration (Bronze → Silver → Gold)
 ├── raw_data/
@@ -138,6 +147,220 @@ All data is stored in Unity Catalog managed tables:
 - Calculates optimal condition indicators
 - Time dimension for temporal analysis
 - Equipment dimension for equipment tracking
+
+## Data Ingestion Patterns
+
+### Date-Based Data Splitting
+
+Split data by date ranges for different ingestion patterns:
+
+```bash
+# Split data into Batch Backfill, Incremental Batch, and API/Streaming Replay
+python scripts/split_data_by_date_ranges.py \
+    --input raw_data/iot_data_raw.csv \
+    --output-dir data_splits/
+```
+
+This creates:
+- **Batch Backfill** (2023-11-26 to 2023-12-19): Single file with ~24 days of historical data
+  - Use for initial data load: `batch_backfill_2023-11-26_to_2023-12-19.csv`
+- **Incremental Batch** (2023-12-20 to 2023-12-23): Daily files for incremental processing
+  - Process one file per day: `incremental_YYYY-MM-DD.csv`
+  - Simulates daily batch ingestion workflow
+- **API/Streaming Replay** (2023-12-24 to 2023-12-26): Daily files for event replay
+  - Use for API simulation or streaming replay: `api_replay_YYYY-MM-DD.csv`
+  - Can be sent via API simulator or processed as streaming events
+
+**Output structure:**
+```
+data_splits/
+├── batch_backfill/
+│   └── batch_backfill_2023-11-26_to_2023-12-19.csv
+├── incremental_batch/
+│   ├── incremental_2023-12-20.csv
+│   ├── incremental_2023-12-21.csv
+│   └── ... (daily files)
+└── api_streaming_replay/
+    ├── api_replay_2023-12-24.csv
+    ├── api_replay_2023-12-25.csv
+    └── api_replay_2023-12-26.csv
+```
+
+### Ingestion Workflow Example
+
+**1. Batch Backfill (Historical Data):**
+```bash
+# Upload backfill file to Databricks
+# Run bronze ingestion once for the entire backfill period
+databricks jobs run-now <job-id> --json '{
+  "job_parameters": {
+    "DATABRICKS_CATALOG": "hydroponics",
+    "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/batch_backfill/batch_backfill_2023-11-26_to_2023-12-19.csv"
+  }
+}'
+```
+
+**2. Incremental Batch (Daily Processing):**
+```bash
+# Process each daily file sequentially
+for date in 2023-12-20 2023-12-21 2023-12-22 2023-12-23; do
+  databricks jobs run-now <job-id> --json "{
+    \"job_parameters\": {
+      \"DATABRICKS_CATALOG\": \"hydroponics\",
+      \"SOURCE_DATA_PATH\": \"/Volumes/hydroponics/bronze/incremental_batch/incremental_${date}.csv\"
+    }
+  }"
+done
+```
+
+**3. API/Streaming Replay:**
+```bash
+# Option A: Send via API simulator
+python scripts/api_simulator.py \
+    --input data_splits/api_streaming_replay/api_replay_2023-12-24.csv \
+    --api-url http://localhost:8000/api/sensor-data \
+    --delay 0.1
+
+# Option B: Process as batch (if replaying from files)
+databricks jobs run-now <job-id> --json '{
+  "job_parameters": {
+    "DATABRICKS_CATALOG": "hydroponics",
+    "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/api_streaming_replay/api_replay_2023-12-24.csv"
+  }
+}'
+```
+
+### API-Based Ingestion
+
+Simulate real-time IoT sensor data ingestion via API:
+
+#### Prerequisites
+
+Before starting, install required Python packages:
+
+```bash
+# Install dependencies
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Required packages:
+- `flask` - Web framework for API server
+- `flask-cors` - CORS support for API
+- `requests` - HTTP library for API simulator
+
+#### Manual Setup
+
+**Step 1: Start API Server**
+
+Open a terminal:
+```bash
+# Start the API server
+python scripts/api_server.py \
+    --port 8000 \
+    --output-dir api_data/ \
+    --buffer-size 100
+```
+
+You should see output like:
+```
+Starting API server on port 8000
+Output directory: api_data
+Buffer size: 100
+API endpoint: http://localhost:8000/api/sensor-data
+------------------------------------------------------------
+ * Running on http://0.0.0.0:8000
+```
+
+**Note:** Keep this terminal open and running. The server will continue to accept requests.
+
+**Step 2: Simulate API Calls**
+
+Open another terminal while keeping the previous running:
+
+```bash
+for date in 2023-12-24 2023-12-25 2023-12-26; do
+  python scripts/api_simulator.py \
+      --input data_splits/api_streaming_replay/api_replay_${date}.csv \
+      --api-url http://localhost:8000/api/sensor-data \
+      --delay 0.1
+done
+```
+
+**Step 3: Check Received Data**
+
+```bash
+# View JSON files created by API server
+ls -lh api_data/
+
+# View a sample file
+cat api_data/sensor_data_*.json | head -20
+```
+
+**Step 4: Stop API Server**
+
+Terminate execution in first terminal 1
+
+**Step 5: Ingest API Data to Bronze (Databricks)**
+
+```python
+# In Databricks, run:
+from src.data_processing.api_ingestion import run_api_ingestion
+
+# Ingest JSON files from API server
+run_api_ingestion(json_dir="/Volumes/hydroponics/bronze/api_data/")
+```
+
+#### API Configuration Options
+
+**API Simulator Options:**
+- `--input`: CSV file to read from
+- `--api-url`: API endpoint URL (default: `http://localhost:8000/api/sensor-data`)
+- `--delay`: Delay between requests in seconds (default: `0.1`)
+- `--batch-size`: Number of records per request (default: `1`)
+- `--start-from`: Row number to start from (0-indexed)
+- `--max-records`: Maximum number of records to send
+
+**API Server Options:**
+- `--port`: Server port (default: `8000`)
+- `--output-dir`: Directory for JSON files (default: `api_data/`)
+- `--buffer-size`: Buffer size before flushing (default: `100`)
+
+#### API Endpoints
+
+- `POST /api/sensor-data` - Send single record or batch of records
+- `POST /api/flush` - Manually flush buffered records
+- `GET /health` - Health check
+
+#### API Data Format
+
+```json
+// Single record
+{
+  "id": "1",
+  "timestamp": "2023-11-26 10:57:52",
+  "pH": "7",
+  "TDS": "500",
+  "water_level": "0",
+  "DHT_temp": "25.5",
+  "DHT_humidity": "60",
+  "water_temp": "20",
+  "pH_reducer": "ON",
+  "add_water": null,
+  "nutrients_adder": "OFF",
+  "humidifier": "OFF",
+  "ex_fan": "ON"
+}
+
+// Batch of records
+{
+  "records": [
+    {"id": "1", "timestamp": "...", ...},
+    {"id": "2", "timestamp": "...", ...}
+  ]
+}
+```
 
 ## Querying the Data
 

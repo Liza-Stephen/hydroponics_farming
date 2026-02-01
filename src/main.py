@@ -1,7 +1,7 @@
 """Main pipeline: Bronze -> Silver -> Gold"""
-from data_processing.bronze_ingestion import run_bronze_ingestion
-from data_processing.silver_processing import run_silver_processing
-from data_processing.gold_processing import run_gold_processing
+from data_processing.bronze.batch_ingestion import run_bronze_ingestion
+from data_processing.silver.processing import run_silver_processing
+from data_processing.gold.processing import run_gold_processing
 import os
 
 

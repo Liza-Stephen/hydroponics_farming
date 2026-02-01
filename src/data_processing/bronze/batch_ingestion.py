@@ -1,4 +1,4 @@
-"""Bronze Layer: Raw data ingestion"""
+"""Bronze Layer: Batch data ingestion"""
 from pyspark.sql.functions import current_timestamp, lit
 from pyspark.sql.types import StructType, StructField, StringType
 from config.databricks_config import get_spark_session
