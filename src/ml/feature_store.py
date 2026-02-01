@@ -47,10 +47,16 @@ class FeatureStoreManager:
         # Read from Gold layer
         df = self.spark.table(f"{self.catalog}.{gold_table_name}")
         
-        # Define window for rolling statistics (last 1 hour, 6 hours, 24 hours)
-        window_1h = Window.partitionBy().orderBy(col("timestamp_key")).rangeBetween(-3600, 0)
-        window_6h = Window.partitionBy().orderBy(col("timestamp_key")).rangeBetween(-21600, 0)
-        window_24h = Window.partitionBy().orderBy(col("timestamp_key")).rangeBetween(-86400, 0)
+        # Define window for rolling statistics using ROWS (row-based, not time-based)
+        # Assuming ~1 reading per minute: 1h ≈ 60 rows, 6h ≈ 360 rows, 24h ≈ 1440 rows
+        # Adjust these values based on your actual data frequency
+        rows_1h = 60   # Approximate rows for 1 hour
+        rows_6h = 360  # Approximate rows for 6 hours
+        rows_24h = 1440  # Approximate rows for 24 hours
+        
+        window_1h = Window.partitionBy().orderBy(col("timestamp_key")).rowsBetween(-rows_1h, 0)
+        window_6h = Window.partitionBy().orderBy(col("timestamp_key")).rowsBetween(-rows_6h, 0)
+        window_24h = Window.partitionBy().orderBy(col("timestamp_key")).rowsBetween(-rows_24h, 0)
         
         # Create features
         df_features = df.select(
