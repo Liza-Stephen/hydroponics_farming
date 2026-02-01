@@ -222,8 +222,9 @@ def batch_inference(
     
     # Create sequences manually (since create_sequences expects DataFrame)
     # We'll create sequences from the numpy array
+    # Match training logic: for forecast_horizon=1, we use range(len - sequence_length)
     X_seq = []
-    for i in range(len(X_raw) - sequence_length + 1):
+    for i in range(len(X_raw) - sequence_length):
         X_seq.append(X_raw[i:i + sequence_length])
     X_seq = np.array(X_seq)
     print(f"Created {len(X_seq)} sequences from {len(pdf)} rows")
