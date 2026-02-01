@@ -1,7 +1,5 @@
-# Core dependencies for Databricks execution
-pyspark>=3.5.0
-
 # API server dependencies (for local simulation)
 flask>=2.3.0
 flask-cors>=4.0.0
 requests>=2.31.0
+boto3>=1.28.0

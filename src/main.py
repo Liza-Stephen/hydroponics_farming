@@ -1,7 +1,8 @@
-"""Main pipeline: Bronze -> Silver -> Gold"""
+"""Main pipeline: Bronze -> Silver -> Gold -> Snowflake"""
 from data_processing.bronze.batch_ingestion import run_bronze_ingestion
 from data_processing.silver.processing import run_silver_processing
 from data_processing.gold.processing import run_gold_processing
+from data_processing.snowflake.processing import run_snowflake_processing
 import os
 
 
@@ -19,6 +20,9 @@ def run_full_pipeline(source_csv_path=None):
     
     print("\nGold Layer...")
     run_gold_processing()
+    
+    print("\nSnowflake Layer...")
+    run_snowflake_processing()
     
     print("\n✓ Pipeline completed!")
 

@@ -1,14 +1,15 @@
 # Hydroponics Farming Data Processing Pipeline
 
-A Databricks-based data processing pipeline implementing the medallion architecture (Bronze → Silver → Gold) for IoT sensor data from hydroponics farming systems.
+A Databricks-based data processing pipeline implementing the medallion architecture (Bronze → Silver → Gold → Snowflake) for IoT sensor data from hydroponics farming systems.
 
 ## Architecture
 
 **Job Structure:**
-- **Single Job** with three dependent tasks:
+- **Single Job** with four dependent tasks:
   - **Bronze Task**: Runs `bronze/batch_ingestion.py` - raw data ingestion
   - **Silver Task**: Runs `silver/processing.py` - data cleaning and validation (depends on Bronze)
   - **Gold Task**: Runs `gold/processing.py` - fact and dimension tables (depends on Silver)
+  - **Snowflake Task**: Runs `snowflake/processing.py` - load data to Snowflake (depends on Gold)
 
 **Execution:**
 - Code runs natively in Databricks via Jobs
@@ -25,6 +26,7 @@ A Databricks-based data processing pipeline implementing the medallion architect
 hydroponics_farming/
 ├── config/
 │   ├── databricks_config.py      # Databricks configuration
+│   └── snowflake_config.py       # Snowflake configuration
 ├── src/
 │   ├── data_processing/
 │   │   ├── bronze/
@@ -32,8 +34,10 @@ hydroponics_farming/
 │   │   │   └── api_ingestion.py             # Bronze layer API ingestion
 │   │   ├── silver/
 │   │   │   └── processing.py      # Silver layer cleaning & validation
-│   │   └── gold/
+│   │   ├── gold/
 │   │   │   └── processing.py      # Gold layer fact & dimension tables
+│   │   ├── snowflake/
+│   │   │   └── processing.py      # Snowflake layer - load data to Snowflake
 │   │   └── main.py                # Main orchestration script (optional)
 ├── scripts/
 │   ├── split_data_by_date_ranges.py # Split CSV by date ranges (backfill/incremental/API)
@@ -41,9 +45,14 @@ hydroponics_farming/
 │   ├── api_server.py                # API server for receiving sensor data
 │   └── api_simulator.py             # Simulate API-based data ingestion
 ├── jobs/
-│   └── data_processing.json       # Main job configuration (Bronze → Silver → Gold)
+│   └── data_processing.json       # Main job configuration (Bronze → Silver → Gold → Snowflake)
+│   └── bronze_processing.json       # Batch and API ingestion into bronze layer
 ├── raw_data/
-│   └── iot_data_raw.csv          # Source IoT sensor data
+│   └── iot_data_raw.csv          # Source IoT sensor data (tracked with DVC)
+├── .dvc/
+│   ├── config                     # DVC configuration
+│   └── .gitignore                 # DVC gitignore
+├── .dvcignore                     # DVC ignore patterns
 └── README.md                     # This file
 ```
 
@@ -53,6 +62,19 @@ hydroponics_farming/
 
 - Databricks workspace access
 - Databricks CLI (for CLI-based job creation)
+- Python 3.8+ with pip
+- DVC (Data Version Control) for data versioning
+
+### Installation
+
+```bash
+# Install dependencies for local development (API server, DVC, etc.)
+pip install -r requirements.txt
+```
+
+- Flask, requests, boto3 (for API server simulation)
+- DVC with S3 support (for data versioning)
+
 
 ### Setup Steps
 
@@ -63,7 +85,7 @@ databricks configure
 # Enter workspace URL and personal access token
 ```
 
-#### 2. Create Databricks Job
+#### 4. Create Databricks Job
 
 **Option A: Using Databricks CLI**
 ```bash
@@ -77,14 +99,48 @@ databricks jobs create --json @jobs/data_processing.json
 4. **Important**: Update the Repo paths
 5. Click **Create**
 
-The job automatically sets up dependencies: Bronze → Silver → Gold
+The job automatically sets up dependencies: Bronze → Silver → Gold → Snowflake
 
-#### 3. Configure Job Parameters (Required)
+#### 5. Configure Job Parameters (Required)
 
 The job requires the following parameters (no defaults):
+
+**For Bronze, Silver, and Gold tasks:**
 - `DATABRICKS_CATALOG`: Unity Catalog catalog name (e.g., `hydroponics`, `main`)
-- `SOURCE_FILE_KEY`: S3 file key (path within bucket) for source CSV file (e.g., `bronze/raw_data/iot_data_raw.csv`)
+- `SOURCE_FILE_KEY`: S3 file key (path within bucket) for source CSV file (e.g., `bronze/raw_data/iot_data_raw.csv`) - **Bronze task only**
 - `S3_BUCKET`: S3 bucket name (e.g., `hydroponics-data`)
+
+**For Snowflake task (additional parameters):**
+
+**⚠️ Important: Snowflake Credentials Explained**
+
+- **Snowflake username/password are NOT your Databricks credentials**
+- You need to create a **separate Snowflake account** and user
+- The Snowflake user is created **in Snowflake** (not in Databricks)
+- Databricks code uses these Snowflake credentials to connect **from Databricks to Snowflake**
+- **Authentication flow**: Databricks runtime → Your Python code → Snowflake connector → Snowflake (using Snowflake credentials)
+
+**Authentication Options:**
+
+**Option 1: Password Authentication (Simple)**
+- `SNOWFLAKE_ACCOUNT`: Snowflake account identifier (e.g., `xy12345.us-east-1`)
+- `SNOWFLAKE_USER`: Snowflake username
+- `SNOWFLAKE_PASSWORD`: Snowflake password
+- `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name (e.g., `COMPUTE_WH`)
+- `SNOWFLAKE_DATABASE`: Snowflake database name (e.g., `HYDROPONICS_DB`)
+- `SNOWFLAKE_SCHEMA`: Snowflake schema name (e.g., `ANALYTICS`)
+
+**Option 2: Key Pair Authentication (Recommended for Production)**
+- `SNOWFLAKE_ACCOUNT`: Snowflake account identifier (e.g., `xy12345.us-east-1`)
+- `SNOWFLAKE_USER`: Snowflake username
+- `SNOWFLAKE_AUTH_METHOD`: Set to `"KEY_PAIR"`
+- `SNOWFLAKE_PRIVATE_KEY`: RSA private key (PEM format, can be base64 encoded)
+- `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`: (Optional) Passphrase if private key is encrypted
+- `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name (e.g., `COMPUTE_WH`)
+- `SNOWFLAKE_DATABASE`: Snowflake database name (e.g., `HYDROPONICS_DB`)
+- `SNOWFLAKE_SCHEMA`: Snowflake schema name (e.g., `ANALYTICS`)
+
+**Note**: For key pair authentication, store the private key in Databricks Secrets for security. See setup instructions below.
 
 The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
 
@@ -93,11 +149,35 @@ The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
 **UI**: 
 1. Click **Run Now** → **Parameters** 
 2. Add parameters:
+
+   **Password Authentication:**
    ```json
    {
      "DATABRICKS_CATALOG": "hydroponics",
      "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
-     "S3_BUCKET": "hydroponics-data"
+     "S3_BUCKET": "hydroponics-data",
+     "SNOWFLAKE_ACCOUNT": "xy12345.us-east-1",
+     "SNOWFLAKE_USER": "your_username",
+     "SNOWFLAKE_PASSWORD": "your_password",
+     "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+     "SNOWFLAKE_DATABASE": "HYDROPONICS_DB",
+     "SNOWFLAKE_SCHEMA": "ANALYTICS"
+   }
+   ```
+
+   **Key Pair Authentication (Recommended):**
+   ```json
+   {
+     "DATABRICKS_CATALOG": "hydroponics",
+     "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
+     "S3_BUCKET": "hydroponics-data",
+     "SNOWFLAKE_ACCOUNT": "xy12345.us-east-1",
+     "SNOWFLAKE_USER": "your_username",
+     "SNOWFLAKE_AUTH_METHOD": "KEY_PAIR",
+     "SNOWFLAKE_PRIVATE_KEY": "{{secrets/snowflake/private_key}}",
+     "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+     "SNOWFLAKE_DATABASE": "HYDROPONICS_DB",
+     "SNOWFLAKE_SCHEMA": "ANALYTICS"
    }
    ```
 
@@ -107,7 +187,13 @@ databricks jobs run-now <job-id> --json '{
   "job_parameters": {
     "DATABRICKS_CATALOG": "hydroponics",
     "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
-    "S3_BUCKET": "hydroponics-data"
+    "S3_BUCKET": "hydroponics-data",
+    "SNOWFLAKE_ACCOUNT": "xy12345.us-east-1",
+    "SNOWFLAKE_USER": "your_username",
+    "SNOWFLAKE_PASSWORD": "your_password",
+    "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+    "SNOWFLAKE_DATABASE": "HYDROPONICS_DB",
+    "SNOWFLAKE_SCHEMA": "ANALYTICS"
   }
 }'
 ```
@@ -121,10 +207,79 @@ databricks jobs run-now <job-id> --json '{
 2. Find your `data_processing` job
 3. Click **Run Now**
 
-The job will execute tasks in sequence: Bronze → Silver → Gold
+The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
 
-#### 5. Verify Results
+#### 6. Setup Snowflake (Required for Snowflake Layer)
 
+**Important**: Snowflake credentials are **separate from Databricks credentials**. You need to create a Snowflake account and user, then use those credentials in the Databricks job.
+
+**How Authentication Works:**
+1. **Databricks** runs your Python code in its runtime environment
+2. Your code uses the **Snowflake connector** (pre-installed in Databricks) to connect to Snowflake
+3. The connection uses **Snowflake credentials** (username/password or key pair) that you provide as job parameters
+4. **Databricks does NOT authenticate** - it's your code running in Databricks that authenticates to Snowflake
+
+**Prerequisites:**
+- Snowflake account (separate from Databricks account)
+- Snowflake user created with appropriate permissions
+- Snowflake warehouse created
+- Database and schema (will be created automatically if they don't exist)
+
+**Steps to Create Snowflake User and Credentials:**
+
+1. **Sign up for Snowflake** (if you don't have an account):
+   - Go to https://signup.snowflake.com/
+   - Create a free trial account
+   - Note your account identifier (e.g., `xy12345.us-east-1`)
+
+2. **Create a Snowflake User** (in Snowflake UI or SQL):
+   ```sql
+   -- Connect to Snowflake as ACCOUNTADMIN
+   CREATE USER databricks_user 
+     PASSWORD = 'your_secure_password'
+     DEFAULT_ROLE = 'PUBLIC'
+     DEFAULT_WAREHOUSE = 'HYDRO_WH';
+   
+   -- Grant necessary permissions
+   GRANT USAGE ON WAREHOUSE HYDRO_WH TO ROLE PUBLIC;
+   GRANT CREATE DATABASE ON ACCOUNT TO ROLE PUBLIC;
+   ```
+
+3. **Create a Warehouse** (if not exists):
+   ```sql
+   CREATE WAREHOUSE IF NOT EXISTS HYDRO_WH
+     WITH WAREHOUSE_SIZE = 'X-SMALL'
+     AUTO_SUSPEND = 60
+     AUTO_RESUME = TRUE;
+   ```
+
+4. **Note Your Credentials:**
+   - Account identifier: `xy12345.us-east-1` (from your Snowflake URL)
+   - Username: `databricks_user` (or whatever you created)
+   - Password: The password you set (or use key pair authentication)
+
+5. **Use These Credentials in Databricks Job Parameters:**
+   - Set `SNOWFLAKE_ACCOUNT` = your account identifier
+   - Set `SNOWFLAKE_USER` = your Snowflake username
+   - Set `SNOWFLAKE_PASSWORD` = your Snowflake password (or use key pair)
+
+**Note**: 
+- The Snowflake layer will automatically create the database and schema if they don't exist
+- For production, use key pair authentication instead of passwords (more secure)
+- Store sensitive credentials in Databricks Secrets (see key pair authentication setup)
+
+#### 7. Run the Job
+
+**From Databricks UI:**
+1. Go to **Workflows** → **Jobs**
+2. Find your `data_processing` job
+3. Click **Run Now**
+
+The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
+
+#### 8. Verify Results
+
+**Databricks:**
 ```sql
 USE CATALOG hydroponics;
 SELECT COUNT(*) FROM bronze.iot_data;
@@ -132,6 +287,57 @@ SELECT COUNT(*) FROM silver.iot_data;
 SELECT COUNT(*) FROM gold.iot_data;
 SELECT COUNT(*) FROM gold.dim_time;
 SELECT COUNT(*) FROM gold.dim_equipment;
+```
+
+**Snowflake:**
+```sql
+USE DATABASE HYDROPONICS_DB;
+USE SCHEMA ANALYTICS;
+SELECT COUNT(*) FROM dim_time;
+SELECT COUNT(*) FROM dim_equipment;
+SELECT COUNT(*) FROM iot_data;
+```
+
+## Data Version Control (DVC)
+
+This project uses DVC (Data Version Control) for versioning large data files that shouldn't be stored directly in Git.
+
+### DVC Setup
+
+1. **Install DVC**:
+   ```bash
+   pip install "dvc[s3]"
+   ```
+
+2. **Initialize DVC**:
+   ```bash
+   dvc init
+   ```
+
+3. **Configure Remote Storage**:
+   ```bash
+   # S3 remote
+   dvc remote add -d s3 s3://your-bucket/dvc-storage
+   ```
+
+### Tracking Data Files
+
+**Track local data files with DVC:**
+
+```bash
+# Track raw data file (local)
+dvc add raw_data/iot_data_raw.csv
+
+# Commit DVC metadata files to Git
+git add raw_data/iot_data_raw.csv.dvc data_splits.dvc api_data.dvc .dvc .gitignore
+git commit -m "Add data files with DVC"
+```
+
+**Reproduce pipeline with specific data version:**
+```bash
+# Checkout specific data version
+git checkout <commit-hash>
+dvc pull  # Pull corresponding data files from S3
 ```
 
 ## Configuration
@@ -147,6 +353,7 @@ Parameters are passed to Python scripts via `sys.argv`:
 - Bronze task: `[DATABRICKS_CATALOG, S3_BUCKET, SOURCE_FILE_KEY]`
 - Silver task: `[DATABRICKS_CATALOG, S3_BUCKET]`
 - Gold task: `[DATABRICKS_CATALOG, S3_BUCKET]`
+- Snowflake task: `[DATABRICKS_CATALOG, S3_BUCKET, SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA]`
 
 **Note**: If `S3_BUCKET` is not provided as a parameter, the system will attempt to extract it from `SOURCE_DATA_PATH` if it's an S3 path (e.g., `s3://bucket-name/path` → `bucket-name`).
 
@@ -296,28 +503,21 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Required packages:
-- `flask` - Web framework for API server
-- `flask-cors` - CORS support for API
-- `requests` - HTTP library for API simulator
-
-#### Manual Setup
-
 **Step 1: Start API Server**
-
-Open a terminal:
 ```bash
-# Start the API server
+# Start the API server with S3 storage
 python scripts/api_server.py \
     --port 8000 \
-    --output-dir api_data/ \
+    --s3-bucket your-bucket-name \
+    --s3-prefix raw/api_data/ \
     --buffer-size 100
 ```
 
 You should see output like:
 ```
 Starting API server on port 8000
-Output directory: api_data
+S3 bucket: s3://your-bucket-name/bronze/api_data/
+✓ S3 connection successful
 Buffer size: 100
 API endpoint: http://localhost:8000/api/sensor-data
 ------------------------------------------------------------
@@ -341,6 +541,7 @@ done
 
 **Step 3: Check Received Data**
 
+**If using local file storage:**
 ```bash
 # View JSON files created by API server
 ls -lh api_data/
@@ -349,18 +550,28 @@ ls -lh api_data/
 cat api_data/sensor_data_*.json | head -20
 ```
 
+**If using S3 storage:**
+```bash
+# List files in S3
+aws s3 ls s3://your-bucket-name/bronze/api_data/ --recursive
+
+# View a sample file
+aws s3 cp s3://your-bucket-name/bronze/api_data/sensor_data_*.json - | head -20
+```
+
 **Step 4: Stop API Server**
 
-Terminate execution in first terminal 1
+Terminate execution in first terminal (Ctrl+C)
 
-**Step 5: Upload API Data to S3 and Ingest**
+**Step 5: Run API Ingestion Job**
 
+**If using local file storage:**
 ```bash
-# Upload JSON files from API server to S3
+# First upload JSON files to S3
 aws s3 cp --recursive api_data/ s3://your-bucket/bronze/api_data/
 ```
 
-Then run the API ingestion job with S3 path:
+**Then run the API ingestion job:**
 ```bash
 databricks jobs run-now <api-job-id> --json '{
   "job_parameters": {
@@ -373,13 +584,20 @@ databricks jobs run-now <api-job-id> --json '{
 
 #### API Configuration Options
 
+**API Server Options:**
+- `--port`, `-p`: Server port (default: `8000`)
+- `--output-dir`, `-o`: Output directory for local file storage
+- `--s3-bucket`: S3 bucket name for direct S3 storage (takes precedence over `--output-dir`)
+- `--s3-prefix`: S3 prefix/path for storing data (default: `bronze/api_data/`)
+- `--buffer-size`, `-b`: Buffer size before flushing (default: `100`)
+
 **API Simulator Options:**
-- `--input`: CSV file to read from
-- `--api-url`: API endpoint URL (default: `http://localhost:8000/api/sensor-data`)
-- `--delay`: Delay between requests in seconds (default: `0.1`)
-- `--batch-size`: Number of records per request (default: `1`)
+- `--input`, `-i`: CSV file to read from (required)
+- `--api-url`, `-u`: API endpoint URL (required)
+- `--delay`, `-d`: Delay between requests in seconds (default: `0.1`)
+- `--batch-size`, `-b`: Number of records per request (default: `1`)
 - `--start-from`: Row number to start from (0-indexed)
-- `--max-records`: Maximum number of records to send
+- `--max-records`, `-m`: Maximum number of records to send
 
 **API Server Options:**
 - `--port`: Server port (default: `8000`)
