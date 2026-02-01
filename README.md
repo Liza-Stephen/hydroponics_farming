@@ -39,14 +39,30 @@ hydroponics_farming/
 │   │   ├── snowflake/
 │   │   │   └── processing.py      # Snowflake layer - load data to Snowflake
 │   │   └── main.py                # Main orchestration script (optional)
+│   └── ml/
+│       ├── feature_store.py       # Feature Store creation and management
+│       ├── models/
+│       │   ├── lstm_model.py       # LSTM model architecture
+│       │   ├── gru_model.py       # GRU model architecture
+│       │   └── lightgbm_model.py   # LightGBM model
+│       ├── training/
+│       │   ├── train_lstm.py       # LSTM training script
+│       │   ├── train_gru.py        # GRU training script
+│       │   └── train_lightgbm.py   # LightGBM training script
+│       ├── inference/
+│       │   └── predict.py          # Model inference script
+│       └── utils/
+│           ├── mlflow_utils.py     # MLflow helper functions
+│           └── data_preprocessing.py # Data preprocessing utilities
 ├── scripts/
 │   ├── split_data_by_date_ranges.py # Split CSV by date ranges (backfill/incremental/API)
 │   ├── batch_ingestion_example.py   # Example batch processing workflow
 │   ├── api_server.py                # API server for receiving sensor data
 │   └── api_simulator.py             # Simulate API-based data ingestion
 ├── jobs/
-│   └── data_processing.json       # Main job configuration (Bronze → Silver → Gold → Snowflake)
-│   └── bronze_processing.json       # Batch and API ingestion into bronze layer
+│   ├── data_processing.json       # Main job configuration (Bronze → Silver → Gold → Snowflake)
+│   ├── bronze_processing.json     # Batch and API ingestion into bronze layer
+│   └── ml_training.json           # ML training job (Feature Store → LSTM/GRU/LightGBM)
 ├── raw_data/
 │   └── iot_data_raw.csv          # Source IoT sensor data (tracked with DVC)
 ├── .dvc/
@@ -331,6 +347,12 @@ Parameters are passed to Python scripts via `sys.argv`:
   - `iot_data` - Fact table with sensor readings
 - Writes to Snowflake database for analytics and reporting
 - Uses batch inserts for data loading
+
+### ML Consumption Layer
+
+The ML consumption layer provides machine learning capabilities for predictive analytics on hydroponics sensor data, implementing real MLOps practices with Feature Store, MLflow, and model versioning.
+
+**For detailed ML layer documentation, see [ML_README.md](ML_README.md)**
 
 ## Data Ingestion Patterns
 

@@ -1,0 +1,147 @@
+{
+  "name": "ML Training Pipeline",
+  "email_notifications": {
+    "on_failure": [],
+    "on_success": [],
+    "on_start": []
+  },
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "create_feature_store",
+      "description": "Create Feature Store from Gold layer",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/feature_store.py",
+        "parameters": [
+          "${job.dynamic.DATABRICKS_CATALOG}",
+          "${job.dynamic.S3_BUCKET}",
+          "${job.dynamic.DATABRICKS_CATALOG}.gold.iot_data",
+          "sensor_features"
+        ]
+      },
+      "libraries": [],
+      "compute": [
+        {
+          "compute_key": "serverless"
+        }
+      ],
+      "timeout_seconds": 0,
+      "max_retries": 0,
+      "min_retry_interval_millis": 0,
+      "retry_on_timeout": false
+    },
+    {
+      "task_key": "train_lstm",
+      "description": "Train LSTM model for time-series forecasting",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_lstm.py",
+        "parameters": [
+          "${job.dynamic.DATABRICKS_CATALOG}",
+          "${job.dynamic.S3_BUCKET}",
+          "${job.dynamic.DATABRICKS_CATALOG}.feature_store.sensor_features",
+          "ph_level"
+        ]
+      },
+      "libraries": [],
+      "compute": [
+        {
+          "compute_key": "serverless"
+        }
+      ],
+      "timeout_seconds": 0,
+      "max_retries": 0,
+      "min_retry_interval_millis": 0,
+      "retry_on_timeout": false
+    },
+    {
+      "task_key": "train_gru",
+      "description": "Train GRU model for time-series forecasting",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_gru.py",
+        "parameters": [
+          "${job.dynamic.DATABRICKS_CATALOG}",
+          "${job.dynamic.S3_BUCKET}",
+          "${job.dynamic.DATABRICKS_CATALOG}.feature_store.sensor_features",
+          "ph_level"
+        ]
+      },
+      "libraries": [],
+      "compute": [
+        {
+          "compute_key": "serverless"
+        }
+      ],
+      "timeout_seconds": 0,
+      "max_retries": 0,
+      "min_retry_interval_millis": 0,
+      "retry_on_timeout": false
+    },
+    {
+      "task_key": "train_lightgbm",
+      "description": "Train LightGBM model for tabular classification",
+      "depends_on": [
+        {
+          "task_key": "create_feature_store"
+        }
+      ],
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/training/train_lightgbm.py",
+        "parameters": [
+          "${job.dynamic.DATABRICKS_CATALOG}",
+          "${job.dynamic.S3_BUCKET}",
+          "${job.dynamic.DATABRICKS_CATALOG}.feature_store.sensor_features",
+          "is_ph_optimal",
+          "classification"
+        ]
+      },
+      "libraries": [],
+      "compute": [
+        {
+          "compute_key": "serverless"
+        }
+      ],
+      "timeout_seconds": 0,
+      "max_retries": 0,
+      "min_retry_interval_millis": 0,
+      "retry_on_timeout": false
+    }
+  ],
+  "format": "MULTI_TASK",
+  "job_clusters": [
+    {
+      "job_cluster_key": "serverless",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "spark_conf": {
+          "spark.databricks.cluster.profile": "serverless"
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "DATABRICKS_CATALOG",
+      "default": "hydroponics"
+    },
+    {
+      "name": "S3_BUCKET",
+      "default": "hydroponics-data"
+    }
+  ],
+  "run_as": {
+    "user_name": null,
+    "service_principal_name": null
+  },
+  "tags": {}
+}
