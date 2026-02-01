@@ -1,22 +1,5 @@
 # ML Consumption Layer
 
-Machine learning capabilities for predictive analytics on hydroponics sensor data, implementing real MLOps practices with Feature Store, MLflow, and model versioning.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Setup](#setup)
-- [Feature Store](#feature-store)
-- [Models](#models)
-- [MLflow Integration](#mlflow-integration)
-- [Training Models](#training-models)
-- [Model Inference](#model-inference)
-- [Model Versioning](#model-versioning)
-- [Project Structure](#project-structure)
-- [Dependencies](#dependencies)
-- [Examples](#examples)
-
 ## Overview
 
 The ML consumption layer provides:
