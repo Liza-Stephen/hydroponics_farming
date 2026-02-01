@@ -105,28 +105,13 @@ The job requires the following parameters (no defaults):
 
 **For Snowflake task (additional parameters):**
 
-**⚠️ Important: Snowflake Credentials Explained**
-
-- **Snowflake username/password are NOT your Databricks credentials**
-- You need to create a **separate Snowflake account** and user
-- The Snowflake user is created **in Snowflake** (not in Databricks)
-- Databricks code uses these Snowflake credentials to connect **from Databricks to Snowflake**
-- **Authentication flow**: Databricks runtime → Your Python code → Snowflake connector → Snowflake (using Snowflake credentials)
-
 **Authentication:**
 - `SNOWFLAKE_ACCOUNT`: Snowflake account identifier
-  - Format: `{account_locator}.{region}`
-  - Examples: 
-    - `xy12345.us-east-1` (standard format)
-    - `IV81730.AWS_US_EAST_2` (with cloud provider prefix)
-    - `yp25170.us-west-2` (modern accounts)
 - `SNOWFLAKE_USER`: Snowflake username
 - `SNOWFLAKE_PASSWORD`: Snowflake password
-- `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name (e.g., `COMPUTE_WH`)
-- `SNOWFLAKE_DATABASE`: Snowflake database name (e.g., `HYDROPONICS_DB`)
-- `SNOWFLAKE_SCHEMA`: Snowflake schema name (e.g., `ANALYTICS`)
-
-The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
+- `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name
+- `SNOWFLAKE_DATABASE`: Snowflake database name
+- `SNOWFLAKE_SCHEMA`: Snowflake schema name
 
 **To set parameters when running:**
 
@@ -138,7 +123,7 @@ The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
      "DATABRICKS_CATALOG": "hydroponics",
      "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
      "S3_BUCKET": "hydroponics-data",
-     "SNOWFLAKE_ACCOUNT": "IV81730.AWS_US_EAST_2",
+     "SNOWFLAKE_ACCOUNT": "account_identifier",
      "SNOWFLAKE_USER": "your_username",
      "SNOWFLAKE_PASSWORD": "your_password",
      "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
@@ -166,39 +151,9 @@ databricks jobs run-now <job-id> --json '{
 
 **Note**: The `SOURCE_FILE_KEY` should be the path within the S3 bucket (without the `s3://` prefix or bucket name). Leading slashes are automatically removed.
 
-#### 5. Run the Job
+#### 5. Setup Snowflake (Required for Snowflake Layer)
 
-**From Databricks UI:**
-1. Go to **Workflows** → **Jobs**
-2. Find your `data_processing` job
-3. Click **Run Now**
-
-The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
-
-#### 6. Setup Snowflake (Required for Snowflake Layer)
-
-**Important**: Snowflake credentials are **separate from Databricks credentials**. You need to create a Snowflake account and user, then use those credentials in the Databricks job.
-
-**How Authentication Works:**
-1. **Databricks** runs your Python code in its runtime environment
-2. Your code uses the **Snowflake connector** (pre-installed in Databricks) to connect to Snowflake
-3. The connection uses **Snowflake credentials** (username/password) that you provide as job parameters
-4. **Databricks does NOT authenticate** - it's your code running in Databricks that authenticates to Snowflake
-
-**Prerequisites:**
-- Snowflake account (separate from Databricks account)
-- Snowflake user created with appropriate permissions
-- Snowflake warehouse created
-- Database and schema (will be created automatically if they don't exist)
-
-**Steps to Create Snowflake User and Credentials:**
-
-1. **Sign up for Snowflake** (if you don't have an account):
-   - Go to https://signup.snowflake.com/
-   - Create a free trial account
-   - Note your account identifier (e.g., `IV81730.AWS_US_EAST_2` or `xy12345.us-east-1`)
-
-2. **Create a Snowflake User** (in Snowflake UI or SQL):
+1. **Create a Snowflake User** (in Snowflake UI or SQL):
    ```sql
    -- Connect to Snowflake as ACCOUNTADMIN
    CREATE USER databricks_user 
@@ -211,20 +166,7 @@ The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
    GRANT CREATE DATABASE ON ACCOUNT TO ROLE PUBLIC;
    ```
 
-**If Database Already Exists:**
-If the database (e.g., `HYDRO_DB`) already exists but your user doesn't have privileges, grant them:
-   ```sql
-   -- Run as ACCOUNTADMIN
-   GRANT USAGE ON DATABASE HYDRO_DB TO ROLE PUBLIC;
-   GRANT CREATE SCHEMA ON DATABASE HYDRO_DB TO ROLE PUBLIC;
-   GRANT ALL PRIVILEGES ON DATABASE HYDRO_DB TO ROLE PUBLIC;
-   
-   -- If you want to grant to a specific role instead of PUBLIC:
-   -- GRANT USAGE ON DATABASE HYDRO_DB TO ROLE your_role;
-   -- GRANT CREATE SCHEMA ON DATABASE HYDRO_DB TO ROLE your_role;
-   ```
-
-3. **Create a Warehouse** (if not exists):
+2. **Create a Warehouse** (if not exists):
    ```sql
    CREATE WAREHOUSE IF NOT EXISTS HYDRO_WH
      WITH WAREHOUSE_SIZE = 'X-SMALL'
@@ -232,12 +174,12 @@ If the database (e.g., `HYDRO_DB`) already exists but your user doesn't have pri
      AUTO_RESUME = TRUE;
    ```
 
-4. **Note Your Credentials:**
-   - Account identifier: `IV81730.AWS_US_EAST_2` or `xy12345.us-east-1` (from your Snowflake account)
+3. **Note Your Credentials:**
+   - Account identifier: from your Snowflake account
    - Username: `databricks_user` (or whatever you created)
    - Password: The password you set
 
-5. **Use These Credentials in Databricks Job Parameters:**
+4. **Use These Credentials in Databricks Job Parameters:**
    - Set `SNOWFLAKE_ACCOUNT` = your account identifier
    - Set `SNOWFLAKE_USER` = your Snowflake username
    - Set `SNOWFLAKE_PASSWORD` = your Snowflake password
@@ -246,7 +188,7 @@ If the database (e.g., `HYDRO_DB`) already exists but your user doesn't have pri
 - The Snowflake layer will automatically create the database and schema if they don't exist
 - Store sensitive credentials (password) in Databricks Secrets for security
 
-#### 7. Run the Job
+#### 6. Run the Job
 
 **From Databricks UI:**
 1. Go to **Workflows** → **Jobs**
@@ -255,7 +197,7 @@ If the database (e.g., `HYDRO_DB`) already exists but your user doesn't have pri
 
 The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
 
-#### 8. Verify Results
+#### 7. Verify Results
 
 **Databricks:**
 ```sql
