@@ -3,11 +3,6 @@ import os
 import sys
 from pyspark.sql import SparkSession
 
-# Load environment variables if not in Databricks
-if not os.getenv("DATABRICKS_RUNTIME_VERSION"):
-    from dotenv import load_dotenv
-    load_dotenv()
-
 
 class DatabricksConfig:
     """Configuration for Databricks"""
@@ -18,7 +13,7 @@ class DatabricksConfig:
         if len(sys.argv) > 1:
             self.catalog = sys.argv[1]
         else:
-            self.catalog = 'hydroponics'
+            self.catalog = 'abc'
         
         if not self.catalog:
             raise ValueError("DATABRICKS_CATALOG is required. Set it as job parameter or environment variable.")

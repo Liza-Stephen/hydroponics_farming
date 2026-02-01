@@ -1,3 +1,0 @@
-pyspark>=3.5.0
-# Note: Code runs natively in Databricks via Repos and Jobs
-# No databricks-connect needed - code executes directly in Databricks

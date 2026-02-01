@@ -112,4 +112,5 @@ def run_gold_processing():
 
 
 if __name__ == "__main__":
+    # Parameters: [DATABRICKS_CATALOG] - config reads from sys.argv
     run_gold_processing()
