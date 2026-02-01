@@ -98,6 +98,15 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
     pandas_df = df.toPandas()
     print(f"  - Loaded {len(pandas_df)} records")
     
+    # Convert timestamp/datetime columns to ISO format strings (Snowflake doesn't support binding timestamps directly)
+    import pandas as pd
+    for col in pandas_df.columns:
+        if pd.api.types.is_datetime64_any_dtype(pandas_df[col]):
+            # Convert to ISO format string (YYYY-MM-DD HH:MM:SS) that Snowflake can parse
+            pandas_df[col] = pandas_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            # Replace 'NaT' (pandas null timestamp) with None
+            pandas_df[col] = pandas_df[col].replace('NaT', None)
+    
     # Connect to Snowflake and load data
     conn = create_snowflake_connection(config)
     cursor = conn.cursor()
@@ -106,7 +115,7 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
         # Create table if not exists (using pandas schema)
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {snowflake_table_name} (
-            {', '.join([f"{col} {_get_snowflake_type(pandas_df[col].dtype)}" for col in pandas_df.columns])}
+            {', '.join([f"{col} {_get_snowflake_type(pandas_df[col].dtype, col)}" for col in pandas_df.columns])}
         )
         """
         cursor.execute(create_table_sql)
@@ -118,7 +127,7 @@ def load_dimension_table(spark, config, table_name, snowflake_table_name):
         # Write data to Snowflake using INSERT
         # For large datasets, consider using COPY INTO or Snowflake's bulk loading
         if len(pandas_df) > 0:
-            # Convert DataFrame to list of tuples
+            # Convert DataFrame to list of tuples (timestamps are now strings)
             values = [tuple(row) for row in pandas_df.values]
             placeholders = ', '.join(['?' for _ in pandas_df.columns])
             columns = ', '.join(pandas_df.columns)
@@ -154,6 +163,15 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
     pandas_df = df.toPandas()
     print(f"  - Loaded {len(pandas_df)} records")
     
+    # Convert timestamp/datetime columns to ISO format strings (Snowflake doesn't support binding timestamps directly)
+    import pandas as pd
+    for col in pandas_df.columns:
+        if pd.api.types.is_datetime64_any_dtype(pandas_df[col]):
+            # Convert to ISO format string (YYYY-MM-DD HH:MM:SS) that Snowflake can parse
+            pandas_df[col] = pandas_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            # Replace 'NaT' (pandas null timestamp) with None
+            pandas_df[col] = pandas_df[col].replace('NaT', None)
+    
     # Connect to Snowflake and load data
     conn = create_snowflake_connection(config)
     cursor = conn.cursor()
@@ -162,7 +180,7 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
         # Create table if not exists
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {snowflake_table_name} (
-            {', '.join([f"{col} {_get_snowflake_type(pandas_df[col].dtype)}" for col in pandas_df.columns])}
+            {', '.join([f"{col} {_get_snowflake_type(pandas_df[col].dtype, col)}" for col in pandas_df.columns])}
         )
         """
         cursor.execute(create_table_sql)
@@ -195,7 +213,7 @@ def load_fact_table(spark, config, table_name, snowflake_table_name):
     return snowflake_table_name
 
 
-def _get_snowflake_type(pandas_dtype):
+def _get_snowflake_type(pandas_dtype, column_name=None):
     """Map pandas dtype to Snowflake SQL type"""
     dtype_str = str(pandas_dtype)
     
@@ -205,7 +223,18 @@ def _get_snowflake_type(pandas_dtype):
         return 'FLOAT'
     elif 'bool' in dtype_str:
         return 'BOOLEAN'
+    elif dtype_str == 'object':
+        # Check if column name suggests timestamp (after string conversion)
+        # Snowflake can auto-convert ISO format strings to TIMESTAMP_NTZ
+        if column_name and ('timestamp' in column_name.lower() or 
+                           (column_name.lower().endswith('_time') or 
+                            column_name.lower() == 'timestamp_key' or
+                            column_name.lower() == 'timestamp')):
+            return 'TIMESTAMP_NTZ'  # Snowflake will auto-convert ISO string to timestamp
+        else:
+            return 'VARCHAR(16777216)'  # For other strings
     elif 'datetime' in dtype_str:
+        # This shouldn't happen after conversion, but handle it just in case
         return 'TIMESTAMP_NTZ'
     else:
         return 'VARCHAR(16777216)'  # Default to large VARCHAR for strings
