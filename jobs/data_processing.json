@@ -11,7 +11,11 @@
       "task_key": "bronze_processing",
       "run_if": "ALL_SUCCESS",
       "spark_python_task": {
-        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze_ingestion.py"
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze_ingestion.py",
+        "parameters": [
+          "hydroponics",
+          "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
+        ]
       },
       "timeout_seconds": 0,
       "email_notifications": {},
@@ -27,7 +31,11 @@
       ],
       "run_if": "ALL_SUCCESS",
       "spark_python_task": {
-        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/silver_processing.py"
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/silver_processing.py",
+        "parameters": [
+          "hydroponics",
+          "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
+        ]
       },
       "timeout_seconds": 0,
       "email_notifications": {},
@@ -43,7 +51,11 @@
       ],
       "run_if": "ALL_SUCCESS",
       "spark_python_task": {
-        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/gold_processing.py"
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/gold_processing.py",
+        "parameters": [
+          "hydroponics",
+          "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
+        ]
       },
       "timeout_seconds": 0,
       "email_notifications": {},
@@ -54,16 +66,6 @@
   "queue": {
     "enabled": true
   },
-  "parameters": [
-    {
-      "name": "DATABRICKS_CATALOG",
-      "default": "hydroponics"
-    },
-    {
-      "name": "SOURCE_DATA_PATH",
-      "default": "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
-    }
-  ],
   "environments": [
     {
       "environment_key": "Default",
