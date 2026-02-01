@@ -3,9 +3,16 @@ from pyspark.sql.functions import col, year, month, dayofmonth, hour, minute, da
 from config.databricks_config import get_spark_session
 
 
-def create_time_dimension(spark, silver_table_name, time_table_name):
+def create_time_dimension(spark, silver_table_name, time_table_name, s3_silver_path, s3_gold_path):
     """Create time dimension"""
-    df_silver = spark.table(silver_table_name)
+    # Read from silver parquet files in S3 (preferred) or fallback to table
+    silver_parquet_path = f"{s3_silver_path}/parquet/iot_data"
+    try:
+        print(f"Reading silver data from S3: {silver_parquet_path}")
+        df_silver = spark.read.parquet(silver_parquet_path)
+    except Exception as e:
+        print(f"Could not read from S3, falling back to table: {e}")
+        df_silver = spark.table(silver_table_name)
     df_time = df_silver.select(
         col("timestamp").alias("timestamp_key"),
         date_format(col("timestamp"), "yyyy-MM-dd HH:mm:ss").alias("timestamp_full"),
@@ -25,11 +32,21 @@ def create_time_dimension(spark, silver_table_name, time_table_name):
             .otherwise("Weekday").alias("day_type")
     ).distinct()
     
+    # Write parquet to S3
+    parquet_path = f"{s3_gold_path}/parquet/dim_time"
+    print(f"Writing time dimension parquet to {parquet_path}...")
+    df_time.write \
+        .format("parquet") \
+        .mode("overwrite") \
+        .option("compression", "snappy") \
+        .save(parquet_path)
+    
+    # Write to Databricks table
     df_time.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(time_table_name)
     return time_table_name
 
 
-def create_equipment_dimension(spark, equipment_table_name):
+def create_equipment_dimension(spark, equipment_table_name, s3_gold_path):
     """Create equipment dimension"""
     equipment_data = [
         (1, "pH_reducer", "pH Reduction System", "Controls pH levels in nutrient solution"),
@@ -44,13 +61,30 @@ def create_equipment_dimension(spark, equipment_table_name):
         ["equipment_id", "equipment_code", "equipment_name", "equipment_description"]
     )
 
+    # Write parquet to S3
+    parquet_path = f"{s3_gold_path}/parquet/dim_equipment"
+    print(f"Writing equipment dimension parquet to {parquet_path}...")
+    df_equipment.write \
+        .format("parquet") \
+        .mode("overwrite") \
+        .option("compression", "snappy") \
+        .save(parquet_path)
+    
+    # Write to Databricks table
     df_equipment.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(equipment_table_name)
     return equipment_table_name
 
 
-def create_fact_sensor_readings(spark, silver_table_name, fact_table_name):
+def create_fact_sensor_readings(spark, silver_table_name, fact_table_name, s3_silver_path, s3_gold_path):
     """Create fact table"""
-    df_silver = spark.table(silver_table_name)
+    # Read from silver parquet files in S3 (preferred) or fallback to table
+    silver_parquet_path = f"{s3_silver_path}/parquet/iot_data"
+    try:
+        print(f"Reading silver data from S3: {silver_parquet_path}")
+        df_silver = spark.read.parquet(silver_parquet_path)
+    except Exception as e:
+        print(f"Could not read from S3, falling back to table: {e}")
+        df_silver = spark.table(silver_table_name)
     df_fact = df_silver.select(
         col("id").alias("reading_id"),
         col("timestamp").alias("timestamp_key"),
@@ -73,6 +107,16 @@ def create_fact_sensor_readings(spark, silver_table_name, fact_table_name):
         col("source_file")
     )
 
+    # Write parquet to S3
+    parquet_path = f"{s3_gold_path}/parquet/iot_data"
+    print(f"Writing fact table parquet to {parquet_path}...")
+    df_fact.write \
+        .format("parquet") \
+        .mode("overwrite") \
+        .option("compression", "snappy") \
+        .save(parquet_path)
+    
+    # Write to Databricks table
     df_fact.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(fact_table_name)
     return fact_table_name
 
@@ -92,9 +136,9 @@ def create_gold_tables(spark, config):
     spark.sql(f"CREATE TABLE IF NOT EXISTS {fact_table_name} USING DELTA")
     
     # Create dimensions and fact
-    create_time_dimension(spark, silver_table_name, time_table_name)
-    create_equipment_dimension(spark, equipment_table_name)
-    create_fact_sensor_readings(spark, silver_table_name, fact_table_name)
+    create_time_dimension(spark, silver_table_name, time_table_name, config.s3_silver_path, config.s3_gold_path)
+    create_equipment_dimension(spark, equipment_table_name, config.s3_gold_path)
+    create_fact_sensor_readings(spark, silver_table_name, fact_table_name, config.s3_silver_path, config.s3_gold_path)
     
     return {"dim_time": time_table_name, "dim_equipment": equipment_table_name, "iot_data": fact_table_name}
 
@@ -112,5 +156,5 @@ def run_gold_processing():
 
 
 if __name__ == "__main__":
-    # Parameters: [DATABRICKS_CATALOG] - config reads from sys.argv
+    # Parameters: [DATABRICKS_CATALOG, S3_BUCKET] - config reads from sys.argv
     run_gold_processing()

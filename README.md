@@ -12,9 +12,12 @@ A Databricks-based data processing pipeline implementing the medallion architect
 
 **Execution:**
 - Code runs natively in Databricks via Jobs
-- Data stored in Unity Catalog Volumes
+- **Data Storage**: 
+  - Raw data read from S3
+  - Parquet files written to S3 for each layer (bronze, silver, gold)
+  - Delta tables written to Databricks Unity Catalog
 - Tasks run sequentially with dependencies (Bronze → Silver → Gold)
-- Job parameters: `DATABRICKS_CATALOG` and `SOURCE_DATA_PATH`
+- Job parameters: `DATABRICKS_CATALOG` and `SOURCE_DATA_PATH` (S3 path)
 
 ## Project Structure
 
@@ -76,17 +79,42 @@ databricks jobs create --json @jobs/data_processing.json
 
 The job automatically sets up dependencies: Bronze → Silver → Gold
 
-#### 3. Configure Job Parameters (if needed)
+#### 3. Configure Job Parameters (Required)
 
-The job has default parameters defined in the JSON:
-- `DATABRICKS_CATALOG`: `hydroponics`
-- `SOURCE_DATA_PATH`: `/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv`
+The job requires the following parameters (no defaults):
+- `DATABRICKS_CATALOG`: Unity Catalog catalog name (e.g., `hydroponics`, `main`)
+- `SOURCE_FILE_KEY`: S3 file key (path within bucket) for source CSV file (e.g., `bronze/raw_data/iot_data_raw.csv`)
+- `S3_BUCKET`: S3 bucket name (e.g., `hydroponics-data`)
 
-To override when running:
-- **UI**: Click **Run Now** → **Parameters** → Edit values
-- **CLI**: `databricks jobs run-now <job-id> --json '{"job_parameters": {"DATABRICKS_CATALOG": "your_catalog", "SOURCE_DATA_PATH": "your_path"}}'`
+The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
 
-#### 4. Run the Job
+**To set parameters when running:**
+
+**UI**: 
+1. Click **Run Now** → **Parameters** 
+2. Add parameters:
+   ```json
+   {
+     "DATABRICKS_CATALOG": "hydroponics",
+     "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
+     "S3_BUCKET": "hydroponics-data"
+   }
+   ```
+
+**CLI**: 
+```bash
+databricks jobs run-now <job-id> --json '{
+  "job_parameters": {
+    "DATABRICKS_CATALOG": "hydroponics",
+    "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
+    "S3_BUCKET": "hydroponics-data"
+  }
+}'
+```
+
+**Note**: The `SOURCE_FILE_KEY` should be the path within the S3 bucket (without the `s3://` prefix or bucket name). Leading slashes are automatically removed.
+
+#### 5. Run the Job
 
 **From Databricks UI:**
 1. Go to **Workflows** → **Jobs**
@@ -110,18 +138,28 @@ SELECT COUNT(*) FROM gold.dim_equipment;
 
 ### Job Parameters
 
-The job accepts parameters defined in `jobs/data_processing.json`:
-- **DATABRICKS_CATALOG**: Unity Catalog catalog name
-- **SOURCE_DATA_PATH**: Path to source CSV in Volumes
+The job requires the following parameters (no hardcoded defaults):
+- **DATABRICKS_CATALOG**: Unity Catalog catalog name (required)
+- **SOURCE_DATA_PATH**: S3 path to source CSV file (required for bronze task)
+- **S3_BUCKET**: S3 bucket name (required, or will be extracted from SOURCE_DATA_PATH if it's an S3 path)
 
 Parameters are passed to Python scripts via `sys.argv`:
-- Bronze task: `[DATABRICKS_CATALOG, SOURCE_DATA_PATH]`
-- Silver task: `[DATABRICKS_CATALOG]`
-- Gold task: `[DATABRICKS_CATALOG]`
+- Bronze task: `[DATABRICKS_CATALOG, S3_BUCKET, SOURCE_FILE_KEY]`
+- Silver task: `[DATABRICKS_CATALOG, S3_BUCKET]`
+- Gold task: `[DATABRICKS_CATALOG, S3_BUCKET]`
+
+**Note**: If `S3_BUCKET` is not provided as a parameter, the system will attempt to extract it from `SOURCE_DATA_PATH` if it's an S3 path (e.g., `s3://bucket-name/path` → `bucket-name`).
 
 ### Data Storage
 
-All data is stored in Unity Catalog managed tables:
+**S3 Storage (Parquet Files):**
+- `s3://{bucket}/bronze/parquet/iot_data/` - Raw ingested data (parquet)
+- `s3://{bucket}/silver/parquet/iot_data/` - Cleaned and validated data (parquet)
+- `s3://{bucket}/gold/parquet/iot_data/` - Fact table (parquet)
+- `s3://{bucket}/gold/parquet/dim_time/` - Time dimension (parquet)
+- `s3://{bucket}/gold/parquet/dim_equipment/` - Equipment dimension (parquet)
+
+**Databricks Tables (Delta):**
 - `{catalog}.bronze.iot_data` - Raw ingested data
 - `{catalog}.silver.iot_data` - Cleaned and validated data
 - `{catalog}.gold.iot_data` - Fact table
@@ -131,18 +169,26 @@ All data is stored in Unity Catalog managed tables:
 ## Data Processing Details
 
 ### Bronze Layer
-- Ingests raw CSV from Unity Catalog Volumes
+- Ingests raw CSV from S3
+- Writes parquet files to S3 (`s3://{bucket}/bronze/parquet/iot_data/`)
+- Writes Delta table to Databricks Unity Catalog
 - Preserves all original data
 - Adds metadata: `ingestion_timestamp`, `source_file`
 - Uses append mode for incremental loads
 
 ### Silver Layer
+- Reads parquet files from S3 (bronze layer) or falls back to Databricks table
+- Writes parquet files to S3 (`s3://{bucket}/silver/parquet/iot_data/`)
+- Writes Delta table to Databricks Unity Catalog
 - Type conversions (string to numeric, ON/OFF to boolean)
 - Data quality validation (pH, TDS, temperature, humidity ranges)
 - Deduplication based on id and timestamp
 - Adds `silver_processed_timestamp`
 
 ### Gold Layer
+- Reads parquet files from S3 (silver layer) or falls back to Databricks table
+- Writes parquet files to S3 for all tables (`s3://{bucket}/gold/parquet/`)
+- Writes Delta tables to Databricks Unity Catalog
 - Creates star schema with fact and dimension tables
 - Calculates optimal condition indicators
 - Time dimension for temporal analysis
@@ -190,12 +236,12 @@ data_splits/
 
 **1. Batch Backfill (Historical Data):**
 ```bash
-# Upload backfill file to Databricks
 # Run bronze ingestion once for the entire backfill period
 databricks jobs run-now <job-id> --json '{
   "job_parameters": {
-    "DATABRICKS_CATALOG": "hydroponics",
-    "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/batch_backfill/batch_backfill_2023-11-26_to_2023-12-19.csv"
+    "DATABRICKS_CATALOG": "your_catalog",
+    "SOURCE_FILE_KEY": "bronze/batch_backfill/batch_backfill_2023-11-26_to_2023-12-19.csv",
+    "S3_BUCKET": "your-bucket"
   }
 }'
 ```
@@ -206,11 +252,11 @@ databricks jobs run-now <job-id> --json '{
 for date in 2023-12-20 2023-12-21 2023-12-22 2023-12-23; do
   databricks jobs run-now <job-id> --json "{
     \"job_parameters\": {
-      \"DATABRICKS_CATALOG\": \"hydroponics\",
-      \"SOURCE_DATA_PATH\": \"/Volumes/hydroponics/bronze/incremental_batch/incremental_${date}.csv\"
+      \"DATABRICKS_CATALOG\": \"your_catalog\",
+      \"SOURCE_FILE_KEY\": \"bronze/incremental_batch/incremental_${date}.csv\",
+      \"S3_BUCKET\": \"your-bucket\"
     }
   }"
-done
 ```
 
 **3. API/Streaming Replay:**
@@ -222,10 +268,15 @@ python scripts/api_simulator.py \
     --delay 0.1
 
 # Option B: Process as batch (if replaying from files)
+# First upload JSON files to S3
+aws s3 cp --recursive api_data/ s3://your-bucket/bronze/api_data/
+
+# Then run API ingestion job
 databricks jobs run-now <job-id> --json '{
   "job_parameters": {
-    "DATABRICKS_CATALOG": "hydroponics",
-    "SOURCE_DATA_PATH": "/Volumes/hydroponics/bronze/api_streaming_replay/api_replay_2023-12-24.csv"
+    "DATABRICKS_CATALOG": "your_catalog",
+    "SOURCE_FILE_KEY": "bronze/api_data/",
+    "S3_BUCKET": "your-bucket"
   }
 }'
 ```
@@ -302,14 +353,22 @@ cat api_data/sensor_data_*.json | head -20
 
 Terminate execution in first terminal 1
 
-**Step 5: Ingest API Data to Bronze (Databricks)**
+**Step 5: Upload API Data to S3 and Ingest**
 
-```python
-# In Databricks, run:
-from src.data_processing.api_ingestion import run_api_ingestion
+```bash
+# Upload JSON files from API server to S3
+aws s3 cp --recursive api_data/ s3://your-bucket/bronze/api_data/
+```
 
-# Ingest JSON files from API server
-run_api_ingestion(json_dir="/Volumes/hydroponics/bronze/api_data/")
+Then run the API ingestion job with S3 path:
+```bash
+databricks jobs run-now <api-job-id> --json '{
+  "job_parameters": {
+    "DATABRICKS_CATALOG": "your_catalog",
+    "SOURCE_FILE_KEY": "bronze/api_data/",
+    "S3_BUCKET": "your-bucket"
+  }
+}'
 ```
 
 #### API Configuration Options

@@ -18,7 +18,7 @@ def _to_bool(col_name):
         .otherwise(None)
 
 
-def clean_and_validate_data(spark, bronze_table_name, silver_table_name):
+def clean_and_validate_data(spark, bronze_table_name, silver_table_name, s3_bronze_path, s3_silver_path):
     """
     Transform bronze data to silver layer with cleaning and validation
     
@@ -26,11 +26,19 @@ def clean_and_validate_data(spark, bronze_table_name, silver_table_name):
         spark: SparkSession
         bronze_table_name: Full bronze table name (catalog.schema.table)
         silver_table_name: Full silver table name (catalog.schema.table)
+        s3_bronze_path: S3 path for bronze parquet files
+        s3_silver_path: S3 path for silver parquet files
     """
     print("Processing data from bronze to silver layer...")
     
-    # Read from bronze table
-    df = spark.table(bronze_table_name)
+    # Read from bronze parquet files in S3 (preferred) or fallback to table
+    bronze_parquet_path = f"{s3_bronze_path}/parquet/iot_data"
+    try:
+        print(f"Reading from S3: {bronze_parquet_path}")
+        df = spark.read.parquet(bronze_parquet_path)
+    except Exception as e:
+        print(f"Could not read from S3, falling back to table: {e}")
+        df = spark.table(bronze_table_name)
     
     from pyspark.sql.functions import to_timestamp
     
@@ -79,14 +87,25 @@ def clean_and_validate_data(spark, bronze_table_name, silver_table_name):
         "silver_processed_timestamp", current_timestamp()
     )
     
-    # Write directly to managed table
+    # Write parquet to S3
+    parquet_path = f"{s3_silver_path}/parquet/iot_data"
+    print(f"Writing parquet files to {parquet_path}...")
+    df_final.write \
+        .format("parquet") \
+        .mode("overwrite") \
+        .option("compression", "snappy") \
+        .save(parquet_path)
+    
+    # Write to Databricks table
     df_final.write \
         .format("delta") \
         .mode("overwrite") \
-        .option("mergeSchema", "true") \
+        .option("overwriteSchema", "true") \
         .saveAsTable(silver_table_name)
     
     print(f"Successfully processed {df_final.count()} records to silver layer")
+    print(f"  - Parquet files: {parquet_path}")
+    print(f"  - Databricks table: {silver_table_name}")
     return df_final
 
 
@@ -104,7 +123,7 @@ def run_silver_processing():
     
     silver_table_name = create_silver_table(spark, config)
     bronze_table_name = config.get_table_name(config.bronze_schema, "iot_data")
-    df = clean_and_validate_data(spark, bronze_table_name, silver_table_name)
+    df = clean_and_validate_data(spark, bronze_table_name, silver_table_name, config.s3_bronze_path, config.s3_silver_path)
     
     print("\nSample silver data:")
     df.show(5, truncate=False)
@@ -113,5 +132,5 @@ def run_silver_processing():
 
 
 if __name__ == "__main__":
-    # Parameters: [DATABRICKS_CATALOG] - config reads from sys.argv
+    # Parameters: [DATABRICKS_CATALOG, S3_BUCKET] - config reads from sys.argv
     run_silver_processing()
