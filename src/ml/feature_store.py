@@ -1,16 +1,15 @@
 """
-Databricks Feature Store Integration
+Feature Store using Delta Tables
 
-Creates and manages features from the Gold layer for ML consumption.
+Creates and manages features from the Gold layer for ML consumption using Delta tables in Unity Catalog.
 """
-from databricks import feature_store
 from pyspark.sql.functions import col, lag, window, avg, max as spark_max, min as spark_min
 from pyspark.sql.window import Window
 from config.databricks_config import get_spark_session
 
 
 class FeatureStoreManager:
-    """Manages Databricks Feature Store for hydroponics ML features"""
+    """Manages feature tables using Delta tables in Unity Catalog"""
     
     def __init__(self, catalog, database="feature_store"):
         """
@@ -23,7 +22,6 @@ class FeatureStoreManager:
         self.spark, self.config = get_spark_session()
         self.catalog = catalog
         self.database = database
-        self.fs = feature_store.FeatureStoreClient()
         
         # Create database if it doesn't exist
         self.spark.sql(f"CREATE DATABASE IF NOT EXISTS {catalog}.{database}")
@@ -47,7 +45,7 @@ class FeatureStoreManager:
         print(f"Creating sensor features from {gold_table_name}...")
         
         # Read from Gold layer
-        df = self.spark.table(gold_table_name)
+        df = self.spark.table(f"{self.catalog}.{gold_table_name}")
         
         # Define window for rolling statistics (last 1 hour, 6 hours, 24 hours)
         window_1h = Window.partitionBy().orderBy(col("timestamp_key")).rangeBetween(-3600, 0)
@@ -116,37 +114,19 @@ class FeatureStoreManager:
             avg(col("water_temperature")).over(window_6h).alias("water_temp_avg_6h"),
         )
         
-        # Create feature table in Feature Store
+        # Create feature table as Delta table in Unity Catalog
         full_table_name = f"{self.catalog}.{self.database}.{feature_table_name}"
         
-        try:
-            # Try to create feature table
-            self.fs.create_table(
-                name=full_table_name,
-                primary_keys=["reading_id"],
-                df=df_features,
-                description="Sensor readings with engineered features for ML models"
-            )
-            print(f"✓ Created feature table: {full_table_name}")
-        except Exception as e:
-            # Table might already exist, try to write to it
-            if "already exists" in str(e).lower():
-                print(f"⚠️  Feature table {full_table_name} already exists. Writing to existing table...")
-                self.fs.write_table(
-                    name=full_table_name,
-                    df=df_features,
-                    mode="overwrite"
-                )
-                print(f"✓ Updated feature table: {full_table_name}")
-            else:
-                raise
+        print(f"Creating feature table as Delta table: {full_table_name}")
+        df_features.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(full_table_name)
+        print(f"✓ Created feature table: {full_table_name}")
         
         return full_table_name
     
     def get_feature_table(self, feature_table_name):
         """Get feature table as Spark DataFrame"""
         full_table_name = f"{self.catalog}.{self.database}.{feature_table_name}"
-        return self.fs.read_table(name=full_table_name)
+        return self.spark.table(full_table_name)
 
 
 def create_feature_store(catalog, gold_table_name, feature_table_name="sensor_features"):
@@ -155,7 +135,7 @@ def create_feature_store(catalog, gold_table_name, feature_table_name="sensor_fe
     
     Args:
         catalog: Unity Catalog name
-        gold_table_name: Full table name for Gold fact table (e.g., catalog.gold.iot_data)
+        gold_table_name: Full table name for Gold fact table
         feature_table_name: Name for the feature table (default: sensor_features)
     
     Returns:
@@ -174,7 +154,7 @@ if __name__ == "__main__":
     
     catalog = sys.argv[1]
     s3_bucket = sys.argv[2]  # Not used but required for config
-    gold_table_name = sys.argv[3] if len(sys.argv) > 3 else f"{catalog}.gold.iot_data"
+    gold_table_name = sys.argv[3] if len(sys.argv) > 3 else "gold.iot_data"
     feature_table_name = sys.argv[4] if len(sys.argv) > 4 else "sensor_features"
     
     create_feature_store(catalog, gold_table_name, feature_table_name)
