@@ -128,7 +128,7 @@ FROM gold.iot_data;
    - **Task 4: train_lightgbm** (depends on create_feature_store)
      - Type: Python script
      - Path: `src/ml/training/train_lightgbm.py`
-     - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `is_ph_optimal`, `classification`
+     - Parameters: `{catalog}`, `{s3_bucket}`, `{catalog}.feature_store.sensor_features`, `is_env_optimal`
      - Cluster: CPU cluster is sufficient
 
 ### Step 3: Run ML Training Job

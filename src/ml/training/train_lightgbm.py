@@ -178,14 +178,13 @@ if __name__ == "__main__":
     
     catalog = sys.argv[1]
     s3_bucket = sys.argv[2]  # Required for config
-    feature_table_name = sys.argv[3] if len(sys.argv) > 3 else f"{catalog}.feature_store.sensor_features"
+    feature_table_name = sys.argv[3]
     target_col = sys.argv[4] if len(sys.argv) > 4 else "is_env_optimal"
-    task_type = sys.argv[5] if len(sys.argv) > 5 else "classification"
     
     train_lightgbm(
         feature_table_name=feature_table_name,
         target_col=target_col,
-        task_type=task_type,
+        task_type="classification",
         num_leaves=31,
         learning_rate=0.05,
         num_boost_round=100
