@@ -6,32 +6,18 @@ The snowflake-connector-python and pandas packages are pre-installed
 in Databricks runtime and do not need to be installed locally.
 """
 import snowflake.connector
+import snowflake.connector.errors
 from config.databricks_config import get_spark_session
 from config.snowflake_config import SnowflakeConfig
 
 
 def create_snowflake_connection(config):
-    """Create Snowflake connection using password or key pair authentication"""
+    """Create Snowflake connection using password authentication"""
     print(f"Connecting to Snowflake account: {config.account}")
+    print(f"Using user: {config.user}")
     
     # Build connection parameters
-    conn_params = {
-        "account": config.account,
-        "user": config.user,
-        "warehouse": config.warehouse,
-        "database": config.database,
-        "schema": config.schema
-    }
-    
-    # Add authentication method
-    if config.auth_method == "key_pair":
-        print("Using key pair authentication")
-        conn_params["private_key"] = config.private_key
-        if hasattr(config, 'private_key_passphrase') and config.private_key_passphrase:
-            conn_params["private_key_passphrase"] = config.private_key_passphrase
-    else:
-        print("Using password authentication")
-        conn_params["password"] = config.password
+    conn_params = config.get_connection_params()
     
     conn = snowflake.connector.connect(**conn_params)
     print(f"✓ Connected to Snowflake: {config.database}.{config.schema}")
@@ -43,16 +29,52 @@ def create_snowflake_schema(conn, config):
     cursor = conn.cursor()
     
     try:
-        # Create database if not exists
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config.database}")
-        print(f"✓ Database {config.database} ready")
+        # Try to create database if not exists
+        try:
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config.database}")
+            print(f"✓ Database {config.database} ready")
+        except snowflake.connector.errors.ProgrammingError as e:
+            # Database might already exist - check if we can use it
+            if "already exists" in str(e).lower():
+                print(f"⚠️  Database {config.database} already exists. Attempting to use it...")
+                # Try to use the database - this will fail if no privileges
+                try:
+                    cursor.execute(f"USE DATABASE {config.database}")
+                    print(f"✓ Database {config.database} is accessible")
+                except snowflake.connector.errors.ProgrammingError as use_error:
+                    error_msg = str(use_error)
+                    if "no privileges" in error_msg.lower() or "privileges" in error_msg.lower():
+                        print(f"\n✗ ERROR: Database {config.database} exists but current role has no privileges on it.")
+                        print(f"\nTo fix this, run the following SQL in Snowflake as ACCOUNTADMIN:")
+                        print(f"  GRANT USAGE ON DATABASE {config.database} TO ROLE PUBLIC;")
+                        print(f"  GRANT CREATE SCHEMA ON DATABASE {config.database} TO ROLE PUBLIC;")
+                        print(f"  GRANT ALL PRIVILEGES ON DATABASE {config.database} TO ROLE PUBLIC;")
+                        raise
+                    else:
+                        raise
+            else:
+                raise
         
-        # Use database
-        cursor.execute(f"USE DATABASE {config.database}")
+        # Use database (if not already using it)
+        try:
+            cursor.execute(f"USE DATABASE {config.database}")
+        except:
+            pass  # Already using it
         
-        # Create schema if not exists
-        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {config.schema}")
-        print(f"✓ Schema {config.schema} ready")
+        # Create schema if not exists (database is already in use)
+        try:
+            cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {config.schema}")
+            print(f"✓ Schema {config.schema} ready")
+        except snowflake.connector.errors.ProgrammingError as e:
+            if "already exists" in str(e).lower():
+                print(f"✓ Schema {config.schema} already exists")
+            elif "no privileges" in str(e).lower() or "privileges" in str(e).lower():
+                print(f"\n✗ ERROR: Cannot create schema. Current role has no privileges.")
+                print(f"\nTo fix this, run the following SQL in Snowflake as ACCOUNTADMIN:")
+                print(f"  GRANT CREATE SCHEMA ON DATABASE {config.database} TO ROLE PUBLIC;")
+                raise
+            else:
+                raise
         
     finally:
         cursor.close()

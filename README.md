@@ -86,13 +86,6 @@ databricks configure
 ```
 
 #### 4. Create Databricks Job
-
-**Option A: Using Databricks CLI**
-```bash
-databricks jobs create --json @jobs/data_processing.json
-```
-
-**Option B: Using Databricks UI (Recommended)**
 1. Go to **Workflows** → **Jobs** → **Create Job**
 2. Click **JSON Editor** (or configure manually)
 3. Copy contents from `jobs/data_processing.json`
@@ -120,27 +113,18 @@ The job requires the following parameters (no defaults):
 - Databricks code uses these Snowflake credentials to connect **from Databricks to Snowflake**
 - **Authentication flow**: Databricks runtime → Your Python code → Snowflake connector → Snowflake (using Snowflake credentials)
 
-**Authentication Options:**
-
-**Option 1: Password Authentication (Simple)**
-- `SNOWFLAKE_ACCOUNT`: Snowflake account identifier (e.g., `xy12345.us-east-1`)
+**Authentication:**
+- `SNOWFLAKE_ACCOUNT`: Snowflake account identifier
+  - Format: `{account_locator}.{region}`
+  - Examples: 
+    - `xy12345.us-east-1` (standard format)
+    - `IV81730.AWS_US_EAST_2` (with cloud provider prefix)
+    - `yp25170.us-west-2` (modern accounts)
 - `SNOWFLAKE_USER`: Snowflake username
 - `SNOWFLAKE_PASSWORD`: Snowflake password
 - `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name (e.g., `COMPUTE_WH`)
 - `SNOWFLAKE_DATABASE`: Snowflake database name (e.g., `HYDROPONICS_DB`)
 - `SNOWFLAKE_SCHEMA`: Snowflake schema name (e.g., `ANALYTICS`)
-
-**Option 2: Key Pair Authentication (Recommended for Production)**
-- `SNOWFLAKE_ACCOUNT`: Snowflake account identifier (e.g., `xy12345.us-east-1`)
-- `SNOWFLAKE_USER`: Snowflake username
-- `SNOWFLAKE_AUTH_METHOD`: Set to `"KEY_PAIR"`
-- `SNOWFLAKE_PRIVATE_KEY`: RSA private key (PEM format, can be base64 encoded)
-- `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`: (Optional) Passphrase if private key is encrypted
-- `SNOWFLAKE_WAREHOUSE`: Snowflake warehouse name (e.g., `COMPUTE_WH`)
-- `SNOWFLAKE_DATABASE`: Snowflake database name (e.g., `HYDROPONICS_DB`)
-- `SNOWFLAKE_SCHEMA`: Snowflake schema name (e.g., `ANALYTICS`)
-
-**Note**: For key pair authentication, store the private key in Databricks Secrets for security. See setup instructions below.
 
 The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
 
@@ -149,32 +133,14 @@ The full S3 path is constructed as: `s3://{S3_BUCKET}/{SOURCE_FILE_KEY}`
 **UI**: 
 1. Click **Run Now** → **Parameters** 
 2. Add parameters:
-
-   **Password Authentication:**
    ```json
    {
      "DATABRICKS_CATALOG": "hydroponics",
      "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
      "S3_BUCKET": "hydroponics-data",
-     "SNOWFLAKE_ACCOUNT": "xy12345.us-east-1",
+     "SNOWFLAKE_ACCOUNT": "IV81730.AWS_US_EAST_2",
      "SNOWFLAKE_USER": "your_username",
      "SNOWFLAKE_PASSWORD": "your_password",
-     "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
-     "SNOWFLAKE_DATABASE": "HYDROPONICS_DB",
-     "SNOWFLAKE_SCHEMA": "ANALYTICS"
-   }
-   ```
-
-   **Key Pair Authentication (Recommended):**
-   ```json
-   {
-     "DATABRICKS_CATALOG": "hydroponics",
-     "SOURCE_FILE_KEY": "bronze/raw_data/iot_data_raw.csv",
-     "S3_BUCKET": "hydroponics-data",
-     "SNOWFLAKE_ACCOUNT": "xy12345.us-east-1",
-     "SNOWFLAKE_USER": "your_username",
-     "SNOWFLAKE_AUTH_METHOD": "KEY_PAIR",
-     "SNOWFLAKE_PRIVATE_KEY": "{{secrets/snowflake/private_key}}",
      "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
      "SNOWFLAKE_DATABASE": "HYDROPONICS_DB",
      "SNOWFLAKE_SCHEMA": "ANALYTICS"
@@ -216,7 +182,7 @@ The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
 **How Authentication Works:**
 1. **Databricks** runs your Python code in its runtime environment
 2. Your code uses the **Snowflake connector** (pre-installed in Databricks) to connect to Snowflake
-3. The connection uses **Snowflake credentials** (username/password or key pair) that you provide as job parameters
+3. The connection uses **Snowflake credentials** (username/password) that you provide as job parameters
 4. **Databricks does NOT authenticate** - it's your code running in Databricks that authenticates to Snowflake
 
 **Prerequisites:**
@@ -230,7 +196,7 @@ The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
 1. **Sign up for Snowflake** (if you don't have an account):
    - Go to https://signup.snowflake.com/
    - Create a free trial account
-   - Note your account identifier (e.g., `xy12345.us-east-1`)
+   - Note your account identifier (e.g., `IV81730.AWS_US_EAST_2` or `xy12345.us-east-1`)
 
 2. **Create a Snowflake User** (in Snowflake UI or SQL):
    ```sql
@@ -245,6 +211,19 @@ The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
    GRANT CREATE DATABASE ON ACCOUNT TO ROLE PUBLIC;
    ```
 
+**If Database Already Exists:**
+If the database (e.g., `HYDRO_DB`) already exists but your user doesn't have privileges, grant them:
+   ```sql
+   -- Run as ACCOUNTADMIN
+   GRANT USAGE ON DATABASE HYDRO_DB TO ROLE PUBLIC;
+   GRANT CREATE SCHEMA ON DATABASE HYDRO_DB TO ROLE PUBLIC;
+   GRANT ALL PRIVILEGES ON DATABASE HYDRO_DB TO ROLE PUBLIC;
+   
+   -- If you want to grant to a specific role instead of PUBLIC:
+   -- GRANT USAGE ON DATABASE HYDRO_DB TO ROLE your_role;
+   -- GRANT CREATE SCHEMA ON DATABASE HYDRO_DB TO ROLE your_role;
+   ```
+
 3. **Create a Warehouse** (if not exists):
    ```sql
    CREATE WAREHOUSE IF NOT EXISTS HYDRO_WH
@@ -254,19 +233,18 @@ The job will execute tasks in sequence: Bronze → Silver → Gold → Snowflake
    ```
 
 4. **Note Your Credentials:**
-   - Account identifier: `xy12345.us-east-1` (from your Snowflake URL)
+   - Account identifier: `IV81730.AWS_US_EAST_2` or `xy12345.us-east-1` (from your Snowflake account)
    - Username: `databricks_user` (or whatever you created)
-   - Password: The password you set (or use key pair authentication)
+   - Password: The password you set
 
 5. **Use These Credentials in Databricks Job Parameters:**
    - Set `SNOWFLAKE_ACCOUNT` = your account identifier
    - Set `SNOWFLAKE_USER` = your Snowflake username
-   - Set `SNOWFLAKE_PASSWORD` = your Snowflake password (or use key pair)
+   - Set `SNOWFLAKE_PASSWORD` = your Snowflake password
 
 **Note**: 
 - The Snowflake layer will automatically create the database and schema if they don't exist
-- For production, use key pair authentication instead of passwords (more secure)
-- Store sensitive credentials in Databricks Secrets (see key pair authentication setup)
+- Store sensitive credentials (password) in Databricks Secrets for security
 
 #### 7. Run the Job
 
@@ -396,10 +374,21 @@ Parameters are passed to Python scripts via `sys.argv`:
 - Reads parquet files from S3 (silver layer) or falls back to Databricks table
 - Writes parquet files to S3 for all tables (`s3://{bucket}/gold/parquet/`)
 - Writes Delta tables to Databricks Unity Catalog
-- Creates star schema with fact and dimension tables
-- Calculates optimal condition indicators
-- Time dimension for temporal analysis
-- Equipment dimension for equipment tracking
+- Creates star schema with fact and dimension tables:
+  - `dim_time` - Time dimension for temporal analysis
+  - `dim_equipment` - Equipment dimension for equipment tracking
+  - `iot_data` - Fact table with sensor readings and optimal condition indicators
+- Calculates optimal condition indicators (pH, TDS, temperature, humidity)
+
+### Snowflake Layer
+- **Source**: Reads from **Gold layer output** (fact and dimension tables)
+- Reads parquet files from S3 (`s3://{bucket}/gold/parquet/`) or falls back to Gold Databricks tables
+- Loads the following Gold tables to Snowflake:
+  - `dim_time` - Time dimension
+  - `dim_equipment` - Equipment dimension
+  - `iot_data` - Fact table with sensor readings
+- Writes to Snowflake database for analytics and reporting
+- Uses batch inserts for data loading
 
 ## Data Ingestion Patterns
 

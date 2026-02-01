@@ -1,8 +1,5 @@
 """Snowflake configuration"""
 import sys
-import base64
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
 
 
 class SnowflakeConfig:
@@ -44,71 +41,20 @@ class SnowflakeConfig:
         else:
             raise ValueError("SNOWFLAKE_USER is required. Set it as job parameter (sys.argv[4]).")
         
-        # Authentication: Support both password and key pair authentication
-        # Option 1: Password authentication (sys.argv[5] = password)
-        # Option 2: Key pair authentication (sys.argv[5] = "KEY_PAIR", sys.argv[6] = private_key, sys.argv[7] = passphrase (optional))
+        # Password authentication (sys.argv[5] = password)
         if len(sys.argv) > 5:
-            auth_method = sys.argv[5]
-            if auth_method == "KEY_PAIR":
-                # Key pair authentication
-                self.auth_method = "key_pair"
-                if len(sys.argv) > 6:
-                    # Private key can be base64 encoded or raw PEM
-                    private_key_str = sys.argv[6]
-                    try:
-                        # Try to decode if base64 encoded
-                        private_key_bytes = base64.b64decode(private_key_str)
-                    except Exception:
-                        # If not base64, assume it's raw PEM string
-                        private_key_bytes = private_key_str.encode('utf-8')
-                    
-                    # Parse the private key
-                    try:
-                        self.private_key = serialization.load_pem_private_key(
-                            private_key_bytes,
-                            password=None,  # Will be set if passphrase provided
-                            backend=default_backend()
-                        )
-                    except Exception as e:
-                        raise ValueError(f"Invalid private key format: {e}")
-                    
-                    # Optional passphrase for encrypted private key
-                    if len(sys.argv) > 7:
-                        passphrase = sys.argv[7]
-                        try:
-                            self.private_key = serialization.load_pem_private_key(
-                                private_key_bytes,
-                                password=passphrase.encode('utf-8'),
-                                backend=default_backend()
-                            )
-                        except Exception as e:
-                            raise ValueError(f"Invalid passphrase or private key: {e}")
-                    else:
-                        self.private_key_passphrase = None
-                else:
-                    raise ValueError("SNOWFLAKE_PRIVATE_KEY is required for key pair authentication. Set it as job parameter (sys.argv[6]).")
-            else:
-                # Password authentication (default)
-                self.auth_method = "password"
-                self.password = auth_method  # sys.argv[5] is the password
-                self.private_key = None
-                self.private_key_passphrase = None
+            self.password = sys.argv[5]
         else:
-            raise ValueError("SNOWFLAKE_PASSWORD or KEY_PAIR authentication is required. Set it as job parameter (sys.argv[5]).")
+            raise ValueError("SNOWFLAKE_PASSWORD is required. Set it as job parameter (sys.argv[5]).")
         
-        # Adjust parameter indices based on authentication method
-        if self.auth_method == "key_pair":
-            # For key pair: sys.argv[6] = private_key, sys.argv[7] = passphrase (optional)
-            # So warehouse starts at sys.argv[7] or sys.argv[8]
-            warehouse_idx = 7 if len(sys.argv) <= 8 else 8
-            database_idx = warehouse_idx + 1
-            schema_idx = database_idx + 1
-        else:
-            # For password: sys.argv[5] = password
-            # So warehouse starts at sys.argv[6]
-            warehouse_idx = 6
-            database_idx = 7
-            schema_idx = 8
+        # Parameter indices for password authentication:
+        # sys.argv[5] = password
+        # sys.argv[6] = warehouse
+        # sys.argv[7] = database
+        # sys.argv[8] = schema
+        warehouse_idx = 6
+        database_idx = 7
+        schema_idx = 8
         
         if len(sys.argv) > warehouse_idx:
             self.warehouse = sys.argv[warehouse_idx]
@@ -138,19 +84,11 @@ class SnowflakeConfig:
     
     def get_connection_params(self):
         """Get Snowflake connection parameters"""
-        params = {
+        return {
             "account": self.account,
             "user": self.user,
+            "password": self.password,
             "warehouse": self.warehouse,
             "database": self.database,
             "schema": self.schema
         }
-        
-        if self.auth_method == "key_pair":
-            params["private_key"] = self.private_key
-            if self.private_key_passphrase:
-                params["private_key_passphrase"] = self.private_key_passphrase
-        else:
-            params["password"] = self.password
-        
-        return params
