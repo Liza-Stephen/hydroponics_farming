@@ -65,6 +65,32 @@
       "email_notifications": {},
       "webhook_notifications": {},
       "environment_key": "Default"
+    },
+    {
+      "task_key": "snowflake_processing",
+      "depends_on": [
+        {
+          "task_key": "gold_processing"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/snowflake/processing.py",
+        "parameters": [
+          "{{job.parameters.DATABRICKS_CATALOG}}",
+          "{{job.parameters.S3_BUCKET}}",
+          "{{job.parameters.SNOWFLAKE_ACCOUNT}}",
+          "{{job.parameters.SNOWFLAKE_USER}}",
+          "{{job.parameters.SNOWFLAKE_PASSWORD}}",
+          "{{job.parameters.SNOWFLAKE_WAREHOUSE}}",
+          "{{job.parameters.SNOWFLAKE_DATABASE}}",
+          "{{job.parameters.SNOWFLAKE_SCHEMA}}"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default"
     }
   ],
   "queue": {

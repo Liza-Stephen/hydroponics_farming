@@ -1,53 +1,55 @@
 {
-    "name": "bronze_processing",
-    "email_notifications": {
-      "no_alert_for_skipped_runs": false
-    },
-    "webhook_notifications": {},
-    "timeout_seconds": 0,
-    "max_concurrent_runs": 1,
-    "tasks": [
-      {
-        "task_key": "bronze_api_ingestion",
-        "run_if": "ALL_SUCCESS",
-        "spark_python_task": {
-          "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze/api_ingestion.py",
-          "parameters": [
-            "hydroponics",
-            "/Volumes/hydroponics/bronze/raw_data/api_data"
-          ]
-        },
-        "timeout_seconds": 0,
-        "email_notifications": {},
-        "webhook_notifications": {},
-        "environment_key": "Default"
+  "name": "bronze_processing",
+  "email_notifications": {
+    "no_alert_for_skipped_runs": false
+  },
+  "webhook_notifications": {},
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "bronze_api_ingestion",
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze/api_ingestion.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "raw/api_data"
+        ]
       },
-      {
-        "task_key": "bronze_batch_ingestion",
-        "run_if": "ALL_SUCCESS",
-        "spark_python_task": {
-          "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze/batch_ingestion.py",
-          "parameters": [
-            "hydroponics",
-            "/Volumes/hydroponics/bronze/raw_data/iot_data_raw.csv"
-          ]
-        },
-        "timeout_seconds": 0,
-        "email_notifications": {},
-        "webhook_notifications": {},
-        "environment_key": "Default"
-      }
-    ],
-    "queue": {
-      "enabled": true
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default"
     },
-    "environments": [
-      {
-        "environment_key": "Default",
-        "spec": {
-          "environment_version": "4"
-        }
+    {
+      "task_key": "bronze_batch_ingestion",
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/bronze/batch_ingestion.py",
+        "parameters": [
+          "hydroponics",
+          "hydroponics-data",
+          "raw/batch_backfill/batch_backfill_2023-11-26_to_2023-12-19.csv"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default"
+    }
+  ],
+  "queue": {
+    "enabled": true
+  },
+  "environments": [
+    {
+      "environment_key": "Default",
+      "spec": {
+        "environment_version": "4"
       }
-    ],
-    "performance_target": "PERFORMANCE_OPTIMIZED"
-  }
+    }
+  ],
+  "performance_target": "PERFORMANCE_OPTIMIZED"
+}

@@ -1,0 +1,42 @@
+# DVC ignore patterns
+# Files and directories that DVC should ignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Databricks
+.databricks/
+
+# Git
+.git/
+.gitignore
+
+# DVC
+.dvc/cache/
+.dvc/tmp/
