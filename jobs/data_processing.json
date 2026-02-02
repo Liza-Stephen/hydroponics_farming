@@ -89,7 +89,32 @@
       },
       "timeout_seconds": 0,
       "email_notifications": {},
+      "webhook_notifications": {},
       "environment_key": "snowflake_env"
+    },
+    {
+      "task_key": "semantic_layer_dbt",
+      "depends_on": [
+        {
+          "task_key": "snowflake_processing"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "spark_python_task": {
+        "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/data_processing/semantic_layer/dbt_runner.py",
+        "parameters": [
+          "GTNZFKD-YP25170",
+          "databricks_user",
+          "qwerty123",
+          "HYDRO_WH",
+          "HYDROPONICS_DB",
+          "ANALYTICS",
+          "dev"
+        ]
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "environment_key": "dbt_env"
     }
   ],
   "queue": {
@@ -99,6 +124,15 @@
     {
       "environment_key": "Default",
       "spec": {
+        "environment_version": "4"
+      }
+    },
+    {
+      "environment_key": "dbt_env",
+      "spec": {
+        "dependencies": [
+          "dbt-snowflake>=1.6.0"
+        ],
         "environment_version": "4"
       }
     },
