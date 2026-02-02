@@ -1,0 +1,90 @@
+version: 2
+
+# Source definitions - point to raw Snowflake tables
+sources:
+  - name: raw_data
+    description: "Raw data from Snowflake analytics schema"
+    database: "{{ var('source_database') }}"
+    schema: "{{ var('source_schema') }}"
+    tables:
+      - name: iot_data
+        description: "Raw IoT sensor data fact table"
+        columns:
+          - name: reading_id
+            description: "Unique identifier for each sensor reading"
+            tests:
+              - unique
+              - not_null
+          - name: timestamp_key
+            description: "Timestamp of the sensor reading"
+            tests:
+              - not_null
+          - name: ph_level
+            description: "pH level reading"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['>= 0', '<= 14']
+          - name: tds_level
+            description: "Total Dissolved Solids level"
+            tests:
+              - not_null
+          - name: is_ph_optimal
+            description: "Boolean indicating if pH is in optimal range"
+            tests:
+              - not_null
+              
+      - name: dim_time
+        description: "Time dimension table"
+        columns:
+          - name: timestamp_key
+            description: "Timestamp key for joining with fact table"
+            tests:
+              - not_null
+              - unique
+
+# Model documentation
+models:
+  - name: stg_iot_data
+    description: "Staging model for IoT sensor data with cleaned column names and calculated fields"
+    columns:
+      - name: reading_id
+        description: "Primary key for sensor reading"
+      - name: is_environment_optimal
+        description: "True if all conditions (pH, TDS, temp, humidity) are optimal"
+        
+  - name: int_sensor_metrics
+    description: "Intermediate model with hourly aggregated sensor metrics"
+    columns:
+      - name: reading_date
+        description: "Date of the readings"
+      - name: reading_hour
+        description: "Hour of the readings (0-23)"
+      - name: environment_optimality_pct
+        description: "Percentage of readings in the hour that had optimal environment"
+        
+  - name: fct_sensor_readings
+    description: "Fact table with business-friendly column names and status classifications"
+    columns:
+      - name: ph_status
+        description: "Categorized pH status: Too Acidic, Too Alkaline, or Optimal"
+      - name: tds_status
+        description: "Categorized TDS status: Low Nutrients, High Nutrients, or Optimal"
+      - name: temperature_status
+        description: "Categorized temperature status: Too Cold, Too Hot, or Optimal"
+        
+  - name: dim_sensor_health
+    description: "Dimension table for sensor health scoring and alerting"
+    columns:
+      - name: health_score
+        description: "Overall health score from 0-100"
+      - name: health_status
+        description: "Health status category: Excellent, Good, Fair, Poor, or Critical"
+        
+  - name: daily_environment_metrics
+    description: "Daily aggregated metrics for environment monitoring and KPI tracking"
+    columns:
+      - name: daily_health_score
+        description: "Average daily health score"
+      - name: daily_environment_efficiency_pct
+        description: "Percentage of time environment was optimal during the day"

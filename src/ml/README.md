@@ -254,7 +254,8 @@ src/ml/
 
 ## Related Documentation
 
-- [Main README](../README.md): Overall pipeline documentation
+- [Main README](../../README.md): Overall pipeline documentation
+- [ML & Semantic Layer Integration](../../docs/ML_SEMANTIC_INTEGRATION.md): How ML consumption layer integrates with semantic layer
 - [Databricks Feature Store](https://docs.databricks.com/machine-learning/feature-store/index.html)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [PyTorch Documentation](https://pytorch.org/docs/stable/index.html)

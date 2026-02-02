@@ -1,0 +1,48 @@
+name: 'hydroponics_semantic'
+version: '1.0.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'hydroponics_semantic'
+
+# These configurations specify where dbt should look for different types of files.
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Configuring models
+# All models in the models/ directory will inherit these configurations
+models:
+  hydroponics_semantic:
+    # Staging models - clean and prepare source data
+    staging:
+      +materialized: view
+      +schema: staging
+      
+    # Intermediate models - business logic transformations
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+      
+    # Mart models - final business-ready tables
+    marts:
+      +materialized: table
+      +schema: marts
+      
+    # Metrics models - KPI and metric definitions
+    metrics:
+      +materialized: table
+      +schema: metrics
+
+# Variables for configuration
+vars:
+  source_database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+  source_schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'ANALYTICS') }}"

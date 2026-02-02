@@ -348,11 +348,22 @@ Parameters are passed to Python scripts via `sys.argv`:
 - Writes to Snowflake database for analytics and reporting
 - Uses batch inserts for data loading
 
+### Semantic Layer (dbt)
+- **Source**: Reads from **Snowflake tables** created by Snowflake layer
+- Runs automatically in Databricks after Snowflake processing completes
+- Creates business-friendly views and metrics:
+  - `marts.fct_sensor_readings` - Fact table with business-friendly columns
+  - `marts.dim_sensor_health` - Health scoring and alerting
+  - `metrics.daily_environment_metrics` - Daily aggregated KPIs
+  - `intermediate.int_sensor_metrics` - Hourly aggregated metrics
+- Provides semantic layer for analytics tools (Tableau, Power BI, etc.)
+- See `dbt/README.md` for detailed documentation
+
 ### ML Consumption Layer
 
 The ML consumption layer provides machine learning capabilities for predictive analytics on hydroponics sensor data, implementing real MLOps practices with Feature Store, MLflow, and model versioning.
 
-**For detailed ML layer documentation, see [ML_README.md](ML_README.md)**
+**For detailed ML layer documentation, see [ML README](src/ml/README.md)**
 
 ## Data Ingestion Patterns
 
