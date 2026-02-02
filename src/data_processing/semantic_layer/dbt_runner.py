@@ -28,10 +28,24 @@ def run_dbt_models(
         snowflake_schema: Snowflake schema name (source schema)
         dbt_target: dbt target environment (dev or prod)
     """
-    dbt_project_path = Path("dbt")
+    # Find dbt project - simple approach: search up from current directory
+    cwd = Path(os.getcwd())
+    dbt_project_path = None
     
-    if not dbt_project_path.exists():
-        raise ValueError(f"dbt project not found at {dbt_project_path}")
+    # Try current directory and parent directories (up to 5 levels)
+    for path in [cwd] + list(cwd.parents)[:5]:
+        dbt_path = path / "dbt"
+        if dbt_path.exists() and (dbt_path / "dbt_project.yml").exists():
+            dbt_project_path = dbt_path
+            break
+    
+    if dbt_project_path is None:
+        raise ValueError(
+            f"dbt project not found. Searched from: {cwd}\n"
+            f"Please ensure the dbt folder exists in the repository root."
+        )
+    
+    print(f"Using dbt project path: {dbt_project_path}")
     
     # Set environment variables for dbt
     os.environ["SNOWFLAKE_ACCOUNT"] = snowflake_account
