@@ -1,95 +1,53 @@
 {
-  "name": "ML Inference Pipeline",
+  "name": "ml_inference",
   "email_notifications": {
-    "on_failure": [],
-    "on_success": [],
-    "on_start": []
+    "no_alert_for_skipped_runs": false
   },
+  "webhook_notifications": {},
   "timeout_seconds": 0,
   "max_concurrent_runs": 1,
   "tasks": [
     {
-      "task_key": "batch_inference",
-      "description": "Run batch inference using all models (LSTM, GRU, LightGBM)",
+      "task_key": "inference",
+      "run_if": "ALL_SUCCESS",
       "spark_python_task": {
         "python_file": "/Repos/lizabinispam@gmail.com/hydroponics_farming/src/ml/inference/batch_inference.py",
         "parameters": [
-          "${job.dynamic.DATABRICKS_CATALOG}",
-          "${job.dynamic.S3_BUCKET}",
-          "${job.dynamic.FEATURE_TABLE_NAME}",
-          "${job.dynamic.LSTM_MODEL_NAME}",
-          "${job.dynamic.GRU_MODEL_NAME}",
-          "${job.dynamic.LIGHTGBM_MODEL_NAME}",
-          "${job.dynamic.OUTPUT_TABLE_NAME}",
-          "${job.dynamic.SEQUENCE_LENGTH}",
-          "${job.dynamic.TARGET_COL}"
+          "hydroponics",
+          "hydroponics-data",
+          "feature_store.sensor_features",
+          "hydroponics.default.hydroponics_lstm_forecast",
+          "hydroponics.default.hydroponics_gru_forecast",
+          "hydroponics.default.hydroponics_lightgbm_classifier",
+          "hydroponics.predictions.batch_predictions"
         ]
       },
-      "libraries": [],
-      "compute": [
-        {
-          "compute_key": "serverless"
-        }
-      ],
       "timeout_seconds": 0,
-      "max_retries": 0,
-      "min_retry_interval_millis": 0,
-      "retry_on_timeout": false
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "env"
     }
   ],
-  "format": "MULTI_TASK",
-  "job_clusters": [
+  "queue": {
+    "enabled": true
+  },
+  "environments": [
     {
-      "job_cluster_key": "serverless",
-      "new_cluster": {
-        "spark_version": "15.4.x-scala2.12",
-        "spark_conf": {
-          "spark.databricks.cluster.profile": "serverless"
-        }
+      "environment_key": "Default",
+      "spec": {
+        "environment_version": "4"
+      }
+    },
+    {
+      "environment_key": "env",
+      "spec": {
+        "dependencies": [
+          "torch",
+          "lightgbm>=4.0.0"
+        ],
+        "environment_version": "4"
       }
     }
   ],
-  "parameters": [
-    {
-      "name": "DATABRICKS_CATALOG",
-      "default": "hydroponics"
-    },
-    {
-      "name": "S3_BUCKET",
-      "default": "hydroponics-data"
-    },
-    {
-      "name": "LSTM_MODEL_NAME",
-      "default": "hydroponics_lstm_forecast"
-    },
-    {
-      "name": "GRU_MODEL_NAME",
-      "default": "hydroponics_gru_forecast"
-    },
-    {
-      "name": "LIGHTGBM_MODEL_NAME",
-      "default": "hydroponics_lightgbm_classifier"
-    },
-    {
-      "name": "FEATURE_TABLE_NAME",
-      "default": "hydroponics.feature_store.sensor_features"
-    },
-    {
-      "name": "OUTPUT_TABLE_NAME",
-      "default": "hydroponics.predictions.batch_predictions"
-    },
-    {
-      "name": "SEQUENCE_LENGTH",
-      "default": "24"
-    },
-    {
-      "name": "TARGET_COL",
-      "default": "ph_level"
-    }
-  ],
-  "run_as": {
-    "user_name": null,
-    "service_principal_name": null
-  },
-  "tags": {}
+  "performance_target": "PERFORMANCE_OPTIMIZED"
 }
