@@ -23,18 +23,18 @@ renamed as (
         air_humidity,
         water_temperature,
         
-        -- Equipment states (boolean)
-        is_ph_reducer_on as ph_reducer_on,
-        is_add_water_on as add_water_on,
-        is_nutrients_adder_on as nutrients_adder_on,
-        is_humidifier_on as humidifier_on,
-        is_ex_fan_on as ex_fan_on,
+        -- Equipment states (boolean) - convert VARCHAR to BOOLEAN
+        try_to_boolean(is_ph_reducer_on) as ph_reducer_on,
+        try_to_boolean(is_add_water_on) as add_water_on,
+        try_to_boolean(is_nutrients_adder_on) as nutrients_adder_on,
+        try_to_boolean(is_humidifier_on) as humidifier_on,
+        try_to_boolean(is_ex_fan_on) as ex_fan_on,
         
-        -- Optimal condition indicators
-        is_ph_optimal,
-        is_tds_optimal,
-        is_temp_optimal,
-        is_humidity_optimal,
+        -- Optimal condition indicators - convert VARCHAR to BOOLEAN
+        try_to_boolean(is_ph_optimal) as is_ph_optimal,
+        try_to_boolean(is_tds_optimal) as is_tds_optimal,
+        try_to_boolean(is_temp_optimal) as is_temp_optimal,
+        try_to_boolean(is_humidity_optimal) as is_humidity_optimal,
         
         -- Metadata
         ingestion_timestamp,
