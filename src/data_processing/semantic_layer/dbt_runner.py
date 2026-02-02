@@ -68,7 +68,7 @@ def run_dbt_models(
       account: "{snowflake_account}"
       user: "{snowflake_user}"
       password: "{snowflake_password}"
-      role: ACCOUNTADMIN
+      role: PUBLIC
       database: "{snowflake_database}"
       warehouse: "{snowflake_warehouse}"
       schema: "{snowflake_schema}"
