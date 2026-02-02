@@ -1,0 +1,6 @@
+target/
+dbt_packages/
+logs/
+*.log
+profiles.yml
+# Keep profiles.yml.example but ignore actual profiles.yml with credentials

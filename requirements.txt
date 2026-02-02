@@ -14,3 +14,6 @@ scikit-learn>=1.3.0
 
 # Snowflake connector
 snowflake>=1.11.0
+
+# Semantic layer (dbt)
+dbt-snowflake>=1.6.0
