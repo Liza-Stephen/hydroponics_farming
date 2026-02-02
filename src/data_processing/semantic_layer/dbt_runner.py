@@ -28,7 +28,7 @@ def run_dbt_models(
         snowflake_schema: Snowflake schema name (source schema)
         dbt_target: dbt target environment (dev or prod)
     """
-    dbt_project_path = "dbt"
+    dbt_project_path = Path("dbt")
     
     if not dbt_project_path.exists():
         raise ValueError(f"dbt project not found at {dbt_project_path}")
