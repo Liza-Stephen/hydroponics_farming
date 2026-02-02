@@ -13,8 +13,7 @@ def run_dbt_models(
     snowflake_password,
     snowflake_warehouse,
     snowflake_database,
-    snowflake_schema,
-    dbt_target="dev"
+    snowflake_schema
 ):
     """
     Run dbt models from Databricks
@@ -26,7 +25,6 @@ def run_dbt_models(
         snowflake_warehouse: Snowflake warehouse name
         snowflake_database: Snowflake database name
         snowflake_schema: Snowflake schema name (source schema)
-        dbt_target: dbt target environment (dev or prod)
     """
     # Find dbt project - simple approach: search up from current directory
     cwd = Path(os.getcwd())
@@ -56,18 +54,41 @@ def run_dbt_models(
     os.environ["SNOWFLAKE_SCHEMA"] = snowflake_schema
     
     print(f"Running dbt models from: {dbt_project_path}")
-    print(f"Target: {dbt_target}")
     print(f"Source schema: {snowflake_schema}")
     
     # Change to dbt project directory
     os.chdir(dbt_project_path)
     
+    # Create profiles.yml dynamically (dbt requires it for connection)
+    profiles_content = f"""hydroponics_semantic:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{snowflake_account}"
+      user: "{snowflake_user}"
+      password: "{snowflake_password}"
+      role: ACCOUNTADMIN
+      database: "{snowflake_database}"
+      warehouse: "{snowflake_warehouse}"
+      schema: "{snowflake_schema}"
+      threads: 4
+      client_session_keep_alive: false
+"""
+    
+    profiles_file = dbt_project_path / "profiles.yml"
+    with open(profiles_file, "w") as f:
+        f.write(profiles_content)
+    
+    # Set DBT_PROFILES_DIR to point to project directory
+    os.environ["DBT_PROFILES_DIR"] = str(dbt_project_path)
+    
     try:
         # Run dbt commands
         commands = [
             ["dbt", "deps"],  # Install dependencies
-            ["dbt", "run", "--target", dbt_target],  # Run all models
-            ["dbt", "test", "--target", dbt_target],  # Run tests
+            ["dbt", "run"],  # Run all models
+            ["dbt", "test"],  # Run tests
         ]
         
         for cmd in commands:
@@ -86,7 +107,12 @@ def run_dbt_models(
             if result.returncode != 0:
                 raise RuntimeError(f"dbt command failed: {' '.join(cmd)}")
         
-        print("\n✓ dbt models completed successfully")
+        print("\ndbt models completed successfully")
+        
+        # Clean up dynamically created profiles.yml
+        if profiles_file.exists():
+            profiles_file.unlink()
+            print("Cleaned up temporary profiles.yml")
         
     except subprocess.CalledProcessError as e:
         print(f"Error running dbt: {e}")
@@ -96,12 +122,20 @@ def run_dbt_models(
             "dbt not found. Install dbt-snowflake in the Databricks environment:\n"
             "Add 'dbt-snowflake>=1.6.0' to your Databricks environment dependencies"
         )
+    finally:
+        # Clean up profiles.yml if it still exists
+        profiles_file = dbt_project_path / "profiles.yml"
+        if profiles_file.exists():
+            try:
+                profiles_file.unlink()
+            except:
+                pass
 
 
 if __name__ == "__main__":
     # Read parameters from sys.argv (Databricks job parameters)
     # Parameters: [SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, 
-    #              SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA, DBT_TARGET]
+    #              SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA]
     
     if len(sys.argv) < 7:
         raise ValueError(
@@ -111,8 +145,7 @@ if __name__ == "__main__":
             "  sys.argv[3] = SNOWFLAKE_PASSWORD\n"
             "  sys.argv[4] = SNOWFLAKE_WAREHOUSE\n"
             "  sys.argv[5] = SNOWFLAKE_DATABASE\n"
-            "  sys.argv[6] = SNOWFLAKE_SCHEMA\n"
-            "  sys.argv[7] = DBT_TARGET (optional, default: dev)"
+            "  sys.argv[6] = SNOWFLAKE_SCHEMA"
         )
     
     snowflake_account = sys.argv[1]
@@ -121,7 +154,6 @@ if __name__ == "__main__":
     snowflake_warehouse = sys.argv[4]
     snowflake_database = sys.argv[5]
     snowflake_schema = sys.argv[6]
-    dbt_target = sys.argv[7] if len(sys.argv) > 7 else "dev"
     
     run_dbt_models(
         snowflake_account=snowflake_account,
@@ -129,6 +161,5 @@ if __name__ == "__main__":
         snowflake_password=snowflake_password,
         snowflake_warehouse=snowflake_warehouse,
         snowflake_database=snowflake_database,
-        snowflake_schema=snowflake_schema,
-        dbt_target=dbt_target
+        snowflake_schema=snowflake_schema
     )
