@@ -1,19 +1,21 @@
-# API server dependencies
-flask>=2.3.0
-flask-cors>=4.0.0
+# Streamlit and visualization
+streamlit>=1.28.0
+plotly>=5.17.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# MLflow for model registry
+mlflow[databricks]>=2.8.0
+databricks-sdk>=0.1.0
+
+# HTTP requests for model serving
 requests>=2.31.0
-boto3>=1.28.0
 
-# Data version control
-dvc[s3]>=3.0.0
+# Environment management
+python-dotenv>=1.0.0
 
-# ML dependencies
-torch>=2.0.0
-lightgbm>=4.0.0
-scikit-learn>=1.3.0
+# LLM Integration (Ollama)
+requests>=2.31.0  # For Ollama API calls
 
-# Snowflake connector
-snowflake>=1.11.0
-
-# Semantic layer (dbt)
-dbt-snowflake>=1.6.0
+# Snowflake
+snowflake-connector-python>=3.0.0
